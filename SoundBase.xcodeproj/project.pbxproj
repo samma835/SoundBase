@@ -14,6 +14,8 @@
 		24E74FCD2F21E82B0057F944 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 24E74FC22F21E82B0057F944 /* LaunchScreen.storyboard */; };
 		24E74FCE2F21E82B0057F944 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 24E74FC42F21E82B0057F944 /* Main.storyboard */; };
 		24E74FD12F21E9F20057F944 /* YouTubeKit in Frameworks */ = {isa = PBXBuildFile; productRef = 24E74FD02F21E9F20057F944 /* YouTubeKit */; };
+		24E74FD32F21EB4E0057F944 /* YouTubeSearchViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FD22F21EB4E0057F944 /* YouTubeSearchViewController.swift */; };
+		24E74FD52F21EB750057F944 /* AudioPlayerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FD42F21EB750057F944 /* AudioPlayerViewController.swift */; };
 		C5AE55C8858A2E1E01EFC947 /* Pods_SoundBase.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */; };
 /* End PBXBuildFile section */
 
@@ -26,6 +28,8 @@
 		24E74FC32F21E82B0057F944 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		24E74FC52F21E82B0057F944 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		24E74FC62F21E82B0057F944 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		24E74FD22F21EB4E0057F944 /* YouTubeSearchViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeSearchViewController.swift; sourceTree = "<group>"; };
+		24E74FD42F21EB750057F944 /* AudioPlayerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerViewController.swift; sourceTree = "<group>"; };
 		39AC2835E3502EFD57981F68 /* Pods-SoundBase.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.debug.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.debug.xcconfig"; sourceTree = "<group>"; };
 		D34462C65A350D09062BC27F /* Pods-SoundBase.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.release.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.release.xcconfig"; sourceTree = "<group>"; };
 		E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SoundBase.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,6 +85,8 @@
 				24E74FC42F21E82B0057F944 /* Main.storyboard */,
 				24E74FC52F21E82B0057F944 /* SceneDelegate.swift */,
 				24E74FC62F21E82B0057F944 /* ViewController.swift */,
+				24E74FD22F21EB4E0057F944 /* YouTubeSearchViewController.swift */,
+				24E74FD42F21EB750057F944 /* AudioPlayerViewController.swift */,
 			);
 			path = SoundBase;
 			sourceTree = "<group>";
@@ -217,6 +223,8 @@
 			files = (
 				24E74FC82F21E82B0057F944 /* AppDelegate.swift in Sources */,
 				24E74FC92F21E82B0057F944 /* SceneDelegate.swift in Sources */,
+				24E74FD52F21EB750057F944 /* AudioPlayerViewController.swift in Sources */,
+				24E74FD32F21EB4E0057F944 /* YouTubeSearchViewController.swift in Sources */,
 				24E74FCA2F21E82B0057F944 /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

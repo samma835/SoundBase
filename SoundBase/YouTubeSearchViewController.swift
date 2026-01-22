@@ -114,9 +114,10 @@ class YouTubeSearchViewController: UIViewController {
     private func parseSearchResults(from html: String) -> [VideoSearchResult] {
         var results: [VideoSearchResult] = []
         
-        let pattern = #"\"videoId\":\"([^\"]+)\"[^}]*\"title\":\{\"runs\":\[\{\"text\":\"([^\"]+)\"\}\][^}]*\"ownerText\":\{\"runs\":\[\{\"text\":\"([^\"]+)\""#
+        // 匹配 videoRenderer 格式，频道名在 longBylineText
+        let pattern = #"\{\"videoRenderer\":\{\"videoId\":\"([^\"]+)\".*?\"title\":\{\"runs\":\[\{\"text\":\"([^\"]+)\".*?\"longBylineText\":\{\"runs\":\[\{\"text\":\"([^\"]+)\""#
         
-        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+        if let regex = try? NSRegularExpression(pattern: pattern, options: .dotMatchesLineSeparators) {
             let nsString = html as NSString
             let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: nsString.length))
             
@@ -125,6 +126,10 @@ class YouTubeSearchViewController: UIViewController {
                 if match.numberOfRanges >= 4 {
                     let videoId = nsString.substring(with: match.range(at: 1))
                     let title = nsString.substring(with: match.range(at: 2))
+                        .replacingOccurrences(of: "\\u0026", with: "&")
+                        .replacingOccurrences(of: "\\/", with: "/")
+                        .replacingOccurrences(of: "\\u003c", with: "<")
+                        .replacingOccurrences(of: "\\u003e", with: ">")
                     let channel = nsString.substring(with: match.range(at: 3))
                     
                     if !seen.contains(videoId) {

@@ -104,8 +104,19 @@ class AudioPlayerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        setupAudioSession()
         loadVideoInfo()
         extractAudio()
+    }
+    
+    private func setupAudioSession() {
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback, mode: .default)
+            try audioSession.setActive(true)
+        } catch {
+            print("Failed to set up audio session: \(error.localizedDescription)")
+        }
     }
     
     override func viewWillDisappear(_ animated: Bool) {
@@ -117,6 +128,7 @@ class AudioPlayerViewController: UIViewController {
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
         }
+        player?.currentItem?.removeObserver(self, forKeyPath: "status")
     }
     
     private func setupUI() {
@@ -234,13 +246,39 @@ class AudioPlayerViewController: UIViewController {
     private func setupPlayer() {
         guard let audioURL = audioURL else { return }
         
+        print("Setting up player with URL: \(audioURL)")
+        
         player = AVPlayer(url: audioURL)
+        
+        // 检查播放器状态
+        player?.currentItem?.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
         
         timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
             self?.updateProgress()
         }
         
         NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: player?.currentItem)
+    }
+    
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "status" {
+            if let statusNumber = change?[.newKey] as? NSNumber {
+                let status = AVPlayerItem.Status(rawValue: statusNumber.intValue)
+                switch status {
+                case .readyToPlay:
+                    print("Player ready to play")
+                case .failed:
+                    print("Player failed: \(player?.currentItem?.error?.localizedDescription ?? "unknown error")")
+                    DispatchQueue.main.async {
+                        self.statusLabel.text = "播放器错误: \(self.player?.currentItem?.error?.localizedDescription ?? "未知错误")"
+                    }
+                case .unknown:
+                    print("Player status unknown")
+                default:
+                    break
+                }
+            }
+        }
     }
     
     private func updateProgress() {
@@ -272,14 +310,19 @@ class AudioPlayerViewController: UIViewController {
     }
     
     @objc private func playButtonTapped() {
-        guard let player = player else { return }
+        guard let player = player else {
+            print("Player is nil")
+            return
+        }
         
         if player.timeControlStatus == .playing {
             player.pause()
             playButton.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
+            print("Paused")
         } else {
             player.play()
             playButton.setImage(UIImage(systemName: "pause.circle.fill"), for: .normal)
+            print("Playing")
         }
     }
     
@@ -298,24 +341,33 @@ class AudioPlayerViewController: UIViewController {
     }
     
     @objc private func downloadButtonTapped() {
-        guard let audioURL = audioURL else { return }
+        guard let audioURL = audioURL else {
+            print("Audio URL is nil")
+            return
+        }
+        
+        print("Starting download from: \(audioURL)")
         
         let alert = UIAlertController(title: "下载音频", message: "正在下载...", preferredStyle: .alert)
         present(alert, animated: true)
         
-        let fileName = "\(video.title ?? "audio").m4a"
+        let fileName = "\(video.title.replacingOccurrences(of: "/", with: "-")).m4a"
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let destinationURL = documentsPath.appendingPathComponent(fileName)
+        
+        print("Destination: \(destinationURL.path)")
         
         URLSession.shared.downloadTask(with: audioURL) { [weak self] tempURL, response, error in
             DispatchQueue.main.async {
                 alert.dismiss(animated: true) {
                     if let error = error {
+                        print("Download error: \(error.localizedDescription)")
                         self?.showAlert(title: "下载失败", message: error.localizedDescription)
                         return
                     }
                     
                     guard let tempURL = tempURL else {
+                        print("Temp URL is nil")
                         self?.showAlert(title: "下载失败", message: "临时文件不存在")
                         return
                     }
@@ -325,8 +377,10 @@ class AudioPlayerViewController: UIViewController {
                             try FileManager.default.removeItem(at: destinationURL)
                         }
                         try FileManager.default.moveItem(at: tempURL, to: destinationURL)
+                        print("Download success: \(destinationURL.path)")
                         self?.showAlert(title: "下载成功", message: "文件已保存至: \(destinationURL.path)")
                     } catch {
+                        print("File move error: \(error.localizedDescription)")
                         self?.showAlert(title: "保存失败", message: error.localizedDescription)
                     }
                 }

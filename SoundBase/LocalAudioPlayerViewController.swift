@@ -12,8 +12,7 @@ import AVFoundation
 class LocalAudioPlayerViewController: UIViewController {
     
     private let audio: DownloadedAudio
-    private var player: AVPlayer?
-    private var timeObserver: Any?
+    private let playerManager = MediaPlayerManager.shared
     
     private lazy var thumbnailImageView: UIImageView = {
         let imageView = UIImageView()
@@ -80,22 +79,24 @@ class LocalAudioPlayerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
-        setupAudioSession()
         loadAudioInfo()
         setupPlayer()
+        setupNotifications()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        updatePlayButtonState()
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         // 不要暂停播放，支持后台继续播放
-        // player?.pause()
+        // 不要清理player，使用全局单例
     }
     
     deinit {
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-        }
-        player?.currentItem?.removeObserver(self, forKeyPath: "status")
+        NotificationCenter.default.removeObserver(self)
     }
     
     private func setupUI() {
@@ -151,13 +152,33 @@ class LocalAudioPlayerViewController: UIViewController {
     }
     
     private func setupAudioSession() {
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default)
-            try audioSession.setActive(true)
-        } catch {
-            print("Failed to set up audio session: \(error.localizedDescription)")
-        }
+        // 音频会话由MediaPlayerManager统一管理
+    }
+    
+    private func setupNotifications() {
+        // 监听播放状态变化
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playbackStateChanged),
+            name: MediaPlayerManager.playbackStateChangedNotification,
+            object: nil
+        )
+        
+        // 监听时间更新
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(timeUpdated),
+            name: MediaPlayerManager.timeUpdateNotification,
+            object: nil
+        )
+        
+        // 监听播放结束
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playbackFinished),
+            name: MediaPlayerManager.playbackFinishedNotification,
+            object: nil
+        )
     }
     
     private func loadAudioInfo() {
@@ -172,41 +193,58 @@ class LocalAudioPlayerViewController: UIViewController {
     }
     
     private func setupPlayer() {
-        let playerItem = AVPlayerItem(url: audio.fileURL)
-        player = AVPlayer(playerItem: playerItem)
-        
-        playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
-        
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
-            self?.updateProgress()
-        }
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
+        // 使用全局播放器管理器
+        playerManager.play(
+            url: audio.fileURL,
+            title: audio.title,
+            artist: audio.channelTitle,
+            artwork: thumbnailImageView.image
+        )
+    }
+    
+    @objc private func playbackStateChanged(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let isPlaying = userInfo["isPlaying"] as? Bool else { return }
+        updatePlayButton(isPlaying: isPlaying)
+    }
+    
+    @objc private func timeUpdated(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let currentTime = userInfo["currentTime"] as? CMTime,
+              let duration = userInfo["duration"] as? CMTime else { return }
+        updateProgress(currentTime: currentTime, duration: duration)
+    }
+    
+    @objc private func playbackFinished() {
+        updatePlayButton(isPlaying: false)
+        playerManager.seek(to: .zero)
     }
     
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "status" {
-            if let statusNumber = change?[.newKey] as? NSNumber {
-                let status = AVPlayerItem.Status(rawValue: statusNumber.intValue)
-                if status == .readyToPlay {
-                    print("Local player ready")
-                } else if status == .failed {
-                    print("Local player failed: \(player?.currentItem?.error?.localizedDescription ?? "unknown")")
-                }
-            }
+        // 不再需要KVO观察
+    }
+    
+    private func updateProgress(currentTime: CMTime, duration: CMTime) {
+        let current = CMTimeGetSeconds(currentTime)
+        let total = CMTimeGetSeconds(duration)
+        
+        if !total.isNaN && !total.isInfinite && total > 0 {
+            progressSlider.value = Float(current / total)
+            currentTimeLabel.text = formatTime(current)
+            durationLabel.text = formatTime(total)
         }
     }
     
-    private func updateProgress() {
-        guard let player = player else { return }
-        
-        let currentTime = CMTimeGetSeconds(player.currentTime())
-        let duration = CMTimeGetSeconds(player.currentItem?.duration ?? .zero)
-        
-        if !duration.isNaN && !duration.isInfinite {
-            progressSlider.value = Float(currentTime / duration)
-            currentTimeLabel.text = formatTime(currentTime)
-            durationLabel.text = formatTime(duration)
+    private func updatePlayButtonState() {
+        let isPlaying = playerManager.isPlaying()
+        updatePlayButton(isPlaying: isPlaying)
+    }
+    
+    private func updatePlayButton(isPlaying: Bool) {
+        if isPlaying {
+            playButton.setImage(UIImage(systemName: "pause.circle.fill"), for: .normal)
+        } else {
+            playButton.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
         }
     }
     
@@ -226,28 +264,17 @@ class LocalAudioPlayerViewController: UIViewController {
     }
     
     @objc private func playButtonTapped() {
-        guard let player = player else { return }
-        
-        if player.timeControlStatus == .playing {
-            player.pause()
-            playButton.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
-        } else {
-            player.play()
-            playButton.setImage(UIImage(systemName: "pause.circle.fill"), for: .normal)
-        }
+        playerManager.togglePlayPause()
     }
     
     @objc private func sliderValueChanged() {
-        guard let player = player,
-              let duration = player.currentItem?.duration else { return }
-        
-        let seconds = Double(progressSlider.value) * CMTimeGetSeconds(duration)
+        let duration = CMTimeGetSeconds(playerManager.duration())
+        let seconds = Double(progressSlider.value) * duration
         let time = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        player.seek(to: time)
+        playerManager.seek(to: time)
     }
     
     @objc private func playerDidFinishPlaying() {
-        playButton.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
-        player?.seek(to: .zero)
+        // 由通知处理
     }
 }

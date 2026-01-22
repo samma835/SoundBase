@@ -21,6 +21,7 @@
 		24E74FDB2F21FEA60057F944 /* MainTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FDA2F21FEA60057F944 /* MainTabBarController.swift */; };
 		24E74FDD2F21FEAD0057F944 /* OfflinePlaylistViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FDC2F21FEAD0057F944 /* OfflinePlaylistViewController.swift */; };
 		24E74FDF2F21FEB40057F944 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */; };
+		24E74FE12F2218510057F944 /* MediaPlayerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FE02F2218510057F944 /* MediaPlayerManager.swift */; };
 		C5AE55C8858A2E1E01EFC947 /* Pods_SoundBase.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */; };
 /* End PBXBuildFile section */
 
@@ -40,6 +41,7 @@
 		24E74FDA2F21FEA60057F944 /* MainTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabBarController.swift; sourceTree = "<group>"; };
 		24E74FDC2F21FEAD0057F944 /* OfflinePlaylistViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflinePlaylistViewController.swift; sourceTree = "<group>"; };
 		24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
+		24E74FE02F2218510057F944 /* MediaPlayerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlayerManager.swift; sourceTree = "<group>"; };
 		39AC2835E3502EFD57981F68 /* Pods-SoundBase.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.debug.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.debug.xcconfig"; sourceTree = "<group>"; };
 		D34462C65A350D09062BC27F /* Pods-SoundBase.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.release.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.release.xcconfig"; sourceTree = "<group>"; };
 		E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SoundBase.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -102,6 +104,7 @@
 				24E74FDA2F21FEA60057F944 /* MainTabBarController.swift */,
 				24E74FDC2F21FEAD0057F944 /* OfflinePlaylistViewController.swift */,
 				24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */,
+				24E74FE02F2218510057F944 /* MediaPlayerManager.swift */,
 			);
 			path = SoundBase;
 			sourceTree = "<group>";
@@ -246,6 +249,7 @@
 				24E74FD72F21FE980057F944 /* AudioFileManager.swift in Sources */,
 				24E74FCA2F21E82B0057F944 /* ViewController.swift in Sources */,
 				24E74FDD2F21FEAD0057F944 /* OfflinePlaylistViewController.swift in Sources */,
+				24E74FE12F2218510057F944 /* MediaPlayerManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

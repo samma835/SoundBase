@@ -8,7 +8,7 @@
 import AVFoundation
 import MediaPlayer
 
-class MediaPlayerManager {
+class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
     static let shared = MediaPlayerManager()
     
     private(set) var player: AVPlayer?
@@ -25,7 +25,8 @@ class MediaPlayerManager {
     static let timeUpdateNotification = Notification.Name("MediaPlayerTimeUpdate")
     static let playbackFinishedNotification = Notification.Name("MediaPlayerPlaybackFinished")
     
-    private init() {
+    private override init() {
+        super.init()
         setupAudioSession()
         setupRemoteCommandCenter()
     }
@@ -113,7 +114,9 @@ class MediaPlayerManager {
     }
     
     func seek(to time: CMTime, completion: ((Bool) -> Void)? = nil) {
-        player?.seek(to: time, completionHandler: completion)
+        player?.seek(to: time) { finished in
+            completion?(finished)
+        }
     }
     
     func isPlaying() -> Bool {

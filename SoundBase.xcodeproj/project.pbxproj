@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3E98CD8A958D484BA042F51F /* MediaPlayerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A092146B6FC47719426BEA3 /* MediaPlayerManager.swift */; };
 		24E74FC82F21E82B0057F944 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FBE2F21E82B0057F944 /* AppDelegate.swift */; };
 		24E74FC92F21E82B0057F944 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FC52F21E82B0057F944 /* SceneDelegate.swift */; };
 		24E74FCA2F21E82B0057F944 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FC62F21E82B0057F944 /* ViewController.swift */; };
@@ -26,6 +27,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		3A092146B6FC47719426BEA3 /* MediaPlayerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlayerManager.swift; sourceTree = "<group>"; };
 		24E74FA62F21E8240057F944 /* SoundBase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SoundBase.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		24E74FBE2F21E82B0057F944 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		24E74FBF2F21E82B0057F944 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -101,6 +103,7 @@
 				24E74FD42F21EB750057F944 /* AudioPlayerViewController.swift */,
 				24E74FD62F21FE980057F944 /* AudioFileManager.swift */,
 				24E74FD82F21FEA10057F944 /* LocalAudioPlayerViewController.swift */,
+				3A092146B6FC47719426BEA3 /* MediaPlayerManager.swift */,
 				24E74FDA2F21FEA60057F944 /* MainTabBarController.swift */,
 				24E74FDC2F21FEAD0057F944 /* OfflinePlaylistViewController.swift */,
 				24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */,
@@ -240,6 +243,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				24E74FD92F21FEA10057F944 /* LocalAudioPlayerViewController.swift in Sources */,
+				3E98CD8A958D484BA042F51F /* MediaPlayerManager.swift in Sources */,
 				24E74FC82F21E82B0057F944 /* AppDelegate.swift in Sources */,
 				24E74FDB2F21FEA60057F944 /* MainTabBarController.swift in Sources */,
 				24E74FDF2F21FEB40057F944 /* SettingsViewController.swift in Sources */,

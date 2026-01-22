@@ -458,10 +458,20 @@ class AudioPlayerViewController: UIViewController {
         
         print("Starting download from: \(audioURL)")
         
-        let alert = UIAlertController(title: "下载音频", message: "正在下载...", preferredStyle: .alert)
-        present(alert, animated: true)
+        // 显示下载开始提示
+        let hud = UIAlertController(title: "开始下载", message: "下载将在后台进行\n可以退出此页面", preferredStyle: .alert)
+        present(hud, animated: true)
         
-        // 使用 AudioFileManager 统一管理下载
+        // 1秒后自动关闭提示
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            hud.dismiss(animated: true)
+        }
+        
+        // 更新按钮状态
+        downloadButton.isEnabled = false
+        downloadButton.setTitle("  下载中...", for: .normal)
+        
+        // 开始后台下载
         AudioFileManager.shared.saveAudio(
             videoId: video.videoId,
             title: video.title,
@@ -469,18 +479,30 @@ class AudioPlayerViewController: UIViewController {
             thumbnailURL: video.thumbnailURL,
             sourceURL: audioURL
         ) { [weak self] result in
+            guard let self = self else { return }
+            
             DispatchQueue.main.async {
-                alert.dismiss(animated: true) {
-                    switch result {
-                    case .success(let audio):
-                        print("Download success: \(audio.fileURL.path)")
-                        self?.downloadedFileURL = audio.fileURL
-                        self?.playLocalButton.isHidden = false
-                        self?.showAlert(title: "下载成功", message: "音频已保存到离线列表")
-                    case .failure(let error):
-                        print("Download error: \(error.localizedDescription)")
-                        self?.showAlert(title: "下载失败", message: error.localizedDescription)
-                    }
+                self.downloadButton.isEnabled = true
+                self.downloadButton.setTitle("  下载", for: .normal)
+                
+                switch result {
+                case .success(let audio):
+                    print("Download success: \(audio.fileURL.path)")
+                    self.downloadedFileURL = audio.fileURL
+                    self.playLocalButton.isHidden = false
+                    
+                    // 显示成功提示
+                    let successAlert = UIAlertController(title: "✅ 下载完成", message: "音频已保存到离线列表", preferredStyle: .alert)
+                    successAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                    self.present(successAlert, animated: true)
+                    
+                case .failure(let error):
+                    print("Download error: \(error.localizedDescription)")
+                    
+                    // 显示失败提示
+                    let errorAlert = UIAlertController(title: "下载失败", message: error.localizedDescription, preferredStyle: .alert)
+                    errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                    self.present(errorAlert, animated: true)
                 }
             }
         }

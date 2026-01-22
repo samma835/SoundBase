@@ -10,12 +10,19 @@ import UIKit
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
+    var backgroundCompletionHandler: (() -> Void)?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         window?.backgroundColor = .white
         window?.makeKeyAndVisible()
         
         return true
+    }
+    
+    // 支持后台下载
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        print("📥 [后台下载] 处理后台下载事件: \(identifier)")
+        backgroundCompletionHandler = completionHandler
     }
 
     // MARK: UISceneSession Lifecycle

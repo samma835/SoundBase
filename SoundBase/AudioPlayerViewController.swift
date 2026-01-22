@@ -13,10 +13,20 @@ import MediaPlayer
 
 class AudioPlayerViewController: UIViewController {
     
+    // 使用静态变量保存播放器实例，使其在视图销毁后继续存在
+    private static var sharedPlayer: AVPlayer?
+    private static var sharedTimeObserver: Any?
+    
     private let video: VideoSearchResult
     private var audioURL: URL?
-    private var player: AVPlayer?
-    private var timeObserver: Any?
+    private var player: AVPlayer? {
+        get { Self.sharedPlayer }
+        set { Self.sharedPlayer = newValue }
+    }
+    private var timeObserver: Any? {
+        get { Self.sharedTimeObserver }
+        set { Self.sharedTimeObserver = newValue }
+    }
     private var downloadedFileURL: URL?
     private var isDownloading = false
     private var lastLoggedDuration: Double = 0
@@ -283,12 +293,8 @@ class AudioPlayerViewController: UIViewController {
     }
     
     deinit {
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-        }
-        player?.currentItem?.removeObserver(self, forKeyPath: "status")
-        player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
-        player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
+        // 注意：不移除timeObserver和KVO观察者，因为player是静态变量
+        // 这些观察者需要在整个应用生命周期内保持，以便后台播放正常工作
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -463,6 +469,15 @@ class AudioPlayerViewController: UIViewController {
         guard let audioURL = audioURL else { return }
         
         print("Setting up player with URL: \(audioURL)")
+        
+        // 清理旧的观察者
+        if let observer = timeObserver {
+            player?.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        player?.currentItem?.removeObserver(self, forKeyPath: "status")
+        player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
+        player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
         
         // 创建 AVAsset 并设置 HTTP headers
         let headers = [

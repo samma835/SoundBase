@@ -65,15 +65,26 @@ class AudioPlayerViewController: UIViewController {
     
     private lazy var playButton: UIButton = {
         let button = UIButton(type: .system)
-        button.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
-        button.tintColor = .systemBlue
+        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+        button.setImage(UIImage(systemName: "play.fill", withConfiguration: config), for: .normal)
+        button.setTitle("  播放", for: .normal)
+        button.tintColor = .white
+        button.backgroundColor = .systemBlue
+        button.layer.cornerRadius = 27
+        button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
         button.addTarget(self, action: #selector(playButtonTapped), for: .touchUpInside)
         return button
     }()
     
     private lazy var downloadButton: UIButton = {
         let button = UIButton(type: .system)
-        button.setTitle("下载音频", for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
+        button.setImage(UIImage(systemName: "arrow.down.circle.fill", withConfiguration: config), for: .normal)
+        button.setTitle("  下载", for: .normal)
+        button.tintColor = .systemBlue
+        button.backgroundColor = .systemGray6
+        button.layer.cornerRadius = 27
+        button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
         button.addTarget(self, action: #selector(downloadButtonTapped), for: .touchUpInside)
         return button
     }()
@@ -197,20 +208,21 @@ class AudioPlayerViewController: UIViewController {
         }
         
         playButton.snp.makeConstraints { make in
-            make.top.equalTo(progressSlider.snp.bottom).offset(24)
-            make.centerX.equalToSuperview()
-            make.width.height.equalTo(80)
+            make.top.equalTo(progressSlider.snp.bottom).offset(32)
+            make.right.equalTo(view.snp.centerX).offset(-12)
+            make.width.equalTo(140)
+            make.height.equalTo(54)
         }
         
         downloadButton.snp.makeConstraints { make in
-            make.top.equalTo(playButton.snp.bottom).offset(24)
-            make.centerX.equalToSuperview()
-            make.width.equalTo(200)
-            make.height.equalTo(50)
+            make.top.equalTo(playButton)
+            make.left.equalTo(view.snp.centerX).offset(12)
+            make.width.equalTo(140)
+            make.height.equalTo(54)
         }
         
         playLocalButton.snp.makeConstraints { make in
-            make.top.equalTo(downloadButton.snp.bottom).offset(16)
+            make.top.equalTo(playButton.snp.bottom).offset(16)
             make.centerX.equalToSuperview()
             make.width.equalTo(200)
             make.height.equalTo(50)
@@ -322,7 +334,8 @@ class AudioPlayerViewController: UIViewController {
         playerItem.addObserver(self, forKeyPath: "playbackBufferEmpty", options: .new, context: nil)
         playerItem.addObserver(self, forKeyPath: "playbackLikelyToKeepUp", options: .new, context: nil)
         
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
+        // 使用1秒间隔更新进度，避免时长计算错误
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
             self?.updateProgress()
         }
         
@@ -365,12 +378,21 @@ class AudioPlayerViewController: UIViewController {
     }
     
     private func updateProgress() {
-        guard let player = player else { return }
+        guard let player = player,
+              let currentItem = player.currentItem else { return }
         
         let currentTime = CMTimeGetSeconds(player.currentTime())
-        let duration = CMTimeGetSeconds(player.currentItem?.duration ?? .zero)
+        let duration = CMTimeGetSeconds(currentItem.duration)
         
-        if !duration.isNaN && !duration.isInfinite {
+        // 添加日志查看实际时长
+        if duration > 0 && !duration.isNaN && !duration.isInfinite {
+            // 只在第一次或时长变化时打印
+            var lastLoggedDuration: Double = 0
+            if abs(lastLoggedDuration - duration) > 1 {
+                print("Duration: \(duration) seconds (\(formatTime(duration)))")
+                lastLoggedDuration = duration
+            }
+            
             progressSlider.value = Float(currentTime / duration)
             currentTimeLabel.text = formatTime(currentTime)
             durationLabel.text = formatTime(duration)
@@ -398,13 +420,16 @@ class AudioPlayerViewController: UIViewController {
             return
         }
         
+        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
         if player.timeControlStatus == .playing {
             player.pause()
-            playButton.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
+            playButton.setImage(UIImage(systemName: "play.fill", withConfiguration: config), for: .normal)
+            playButton.setTitle("  播放", for: .normal)
             print("Paused")
         } else {
             player.play()
-            playButton.setImage(UIImage(systemName: "pause.circle.fill"), for: .normal)
+            playButton.setImage(UIImage(systemName: "pause.fill", withConfiguration: config), for: .normal)
+            playButton.setTitle("  暂停", for: .normal)
             print("Playing")
         }
     }
@@ -419,7 +444,9 @@ class AudioPlayerViewController: UIViewController {
     }
     
     @objc private func playerDidFinishPlaying() {
-        playButton.setImage(UIImage(systemName: "play.circle.fill"), for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+        playButton.setImage(UIImage(systemName: "play.fill", withConfiguration: config), for: .normal)
+        playButton.setTitle("  播放", for: .normal)
         player?.seek(to: .zero)
     }
     
@@ -468,6 +495,7 @@ class AudioPlayerViewController: UIViewController {
         player?.pause()
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
+            timeObserver = nil
         }
         player?.currentItem?.removeObserver(self, forKeyPath: "status")
         player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
@@ -479,7 +507,7 @@ class AudioPlayerViewController: UIViewController {
         
         playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
         
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
             self?.updateProgress()
         }
         
@@ -487,7 +515,9 @@ class AudioPlayerViewController: UIViewController {
         
         // 自动开始播放
         player?.play()
-        playButton.setImage(UIImage(systemName: "pause.circle.fill"), for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+        playButton.setImage(UIImage(systemName: "pause.fill", withConfiguration: config), for: .normal)
+        playButton.setTitle("  暂停", for: .normal)
         playButton.isEnabled = true
         statusLabel.text = "正在播放本地文件"
     }

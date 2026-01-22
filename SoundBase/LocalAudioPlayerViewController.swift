@@ -176,7 +176,7 @@ class LocalAudioPlayerViewController: UIViewController {
         
         playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
         
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
             self?.updateProgress()
         }
         

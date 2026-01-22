@@ -32,6 +32,7 @@ class YouTubeSearchViewController: UIViewController {
         table.dataSource = self
         table.register(VideoCell.self, forCellReuseIdentifier: "VideoCell")
         table.rowHeight = 100
+        table.keyboardDismissMode = .onDrag
         return table
     }()
     

@@ -16,6 +16,7 @@ class AudioPlayerViewController: UIViewController {
     private var audioURL: URL?
     private var player: AVPlayer?
     private var timeObserver: Any?
+    private var downloadedFileURL: URL?
     
     private lazy var thumbnailImageView: UIImageView = {
         let imageView = UIImageView()
@@ -77,6 +78,14 @@ class AudioPlayerViewController: UIViewController {
         return button
     }()
     
+    private lazy var playLocalButton: UIButton = {
+        let button = UIButton(type: .system)
+        button.setTitle("播放本地文件", for: .normal)
+        button.addTarget(self, action: #selector(playLocalButtonTapped), for: .touchUpInside)
+        button.isHidden = true
+        return button
+    }()
+    
     private lazy var statusLabel: UILabel = {
         let label = UILabel()
         label.font = .systemFont(ofSize: 14)
@@ -129,6 +138,8 @@ class AudioPlayerViewController: UIViewController {
             player?.removeTimeObserver(observer)
         }
         player?.currentItem?.removeObserver(self, forKeyPath: "status")
+        player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
+        player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
     }
     
     private func setupUI() {
@@ -144,6 +155,7 @@ class AudioPlayerViewController: UIViewController {
         view.addSubview(durationLabel)
         view.addSubview(playButton)
         view.addSubview(downloadButton)
+        view.addSubview(playLocalButton)
         view.addSubview(activityIndicator)
         
         thumbnailImageView.snp.makeConstraints { make in
@@ -197,6 +209,13 @@ class AudioPlayerViewController: UIViewController {
             make.height.equalTo(50)
         }
         
+        playLocalButton.snp.makeConstraints { make in
+            make.top.equalTo(downloadButton.snp.bottom).offset(16)
+            make.centerX.equalToSuperview()
+            make.width.equalTo(200)
+            make.height.equalTo(50)
+        }
+        
         activityIndicator.snp.makeConstraints { make in
             make.center.equalTo(playButton)
         }
@@ -222,19 +241,47 @@ class AudioPlayerViewController: UIViewController {
                 let youtube = YouTube(videoID: video.videoId)
                 let streams = try await youtube.streams
                 
-                guard let audioStream = streams.filterAudioOnly().highestAudioBitrateStream() else {
+                print("Total streams: \(streams.count)")
+                
+                // 优先选择可原生播放的音频流
+                var audioStream: YouTubeKit.Stream?
+                
+                // 1. 尝试获取可原生播放的音频流
+                let nativePlayableAudioStreams = streams
+                    .filterAudioOnly()
+                    .filter { $0.isNativelyPlayable }
+                
+                if let stream = nativePlayableAudioStreams.highestAudioBitrateStream() {
+                    audioStream = stream
+                    print("Found natively playable audio stream: itag=\(stream.itag)")
+                } else {
+                    // 2. 如果没有，选择任意音频流（但可能无法直接播放）
+                    audioStream = streams.filterAudioOnly().highestAudioBitrateStream()
+                    print("Using non-native audio stream, may not play directly")
+                }
+                
+                guard let selectedStream = audioStream else {
                     throw NSError(domain: "AudioExtraction", code: -1, userInfo: [NSLocalizedDescriptionKey: "未找到音频流"])
                 }
                 
+                print("Selected audio stream: itag=\(selectedStream.itag), fileExtension=\(selectedStream.fileExtension), url=\(selectedStream.url)")
+                
                 await MainActor.run {
-                    self.audioURL = audioStream.url
-                    self.statusLabel.text = "音频已就绪"
-                    self.playButton.isEnabled = true
+                    self.audioURL = selectedStream.url
+                    if selectedStream.isNativelyPlayable {
+                        self.statusLabel.text = "音频已就绪 - 可播放/下载"
+                        self.playButton.isEnabled = true
+                        self.setupPlayer()
+                    } else {
+                        self.statusLabel.text = "音频格式不支持直播 - 请下载后播放"
+                        self.playButton.isEnabled = false
+                    }
                     self.downloadButton.isEnabled = true
                     self.activityIndicator.stopAnimating()
-                    self.setupPlayer()
+                    self.checkLocalFile()
                 }
             } catch {
+                print("Extract audio error: \(error)")
                 await MainActor.run {
                     self.statusLabel.text = "解析失败: \(error.localizedDescription)"
                     self.activityIndicator.stopAnimating()
@@ -243,21 +290,47 @@ class AudioPlayerViewController: UIViewController {
         }
     }
     
+    private func checkLocalFile() {
+        let fileName = "\(video.title.replacingOccurrences(of: "/", with: "-")).m4a"
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fileURL = documentsPath.appendingPathComponent(fileName)
+        
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            downloadedFileURL = fileURL
+            playLocalButton.isHidden = false
+            statusLabel.text = "本地文件已存在 - 可播放"
+        }
+    }
+    
     private func setupPlayer() {
         guard let audioURL = audioURL else { return }
         
         print("Setting up player with URL: \(audioURL)")
         
-        player = AVPlayer(url: audioURL)
+        // 创建 AVAsset 并设置 HTTP headers
+        let headers = [
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9"
+        ]
+        
+        let asset = AVURLAsset(url: audioURL, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        let playerItem = AVPlayerItem(asset: asset)
+        
+        player = AVPlayer(playerItem: playerItem)
         
         // 检查播放器状态
-        player?.currentItem?.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
+        playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
+        
+        // 监听缓冲状态
+        playerItem.addObserver(self, forKeyPath: "playbackBufferEmpty", options: .new, context: nil)
+        playerItem.addObserver(self, forKeyPath: "playbackLikelyToKeepUp", options: .new, context: nil)
         
         timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
             self?.updateProgress()
         }
         
-        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: player?.currentItem)
+        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
     }
     
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
@@ -267,10 +340,20 @@ class AudioPlayerViewController: UIViewController {
                 switch status {
                 case .readyToPlay:
                     print("Player ready to play")
-                case .failed:
-                    print("Player failed: \(player?.currentItem?.error?.localizedDescription ?? "unknown error")")
                     DispatchQueue.main.async {
-                        self.statusLabel.text = "播放器错误: \(self.player?.currentItem?.error?.localizedDescription ?? "未知错误")"
+                        self.statusLabel.text = "音频已就绪 - 点击播放"
+                    }
+                case .failed:
+                    let error = player?.currentItem?.error
+                    print("Player failed: \(error?.localizedDescription ?? "unknown error")")
+                    if let nsError = error as NSError? {
+                        print("Error domain: \(nsError.domain)")
+                        print("Error code: \(nsError.code)")
+                        print("Error userInfo: \(nsError.userInfo)")
+                    }
+                    DispatchQueue.main.async {
+                        self.statusLabel.text = "播放器错误，请尝试下载"
+                        self.showAlert(title: "播放失败", message: "音频流可能需要下载后播放")
                     }
                 case .unknown:
                     print("Player status unknown")
@@ -278,6 +361,10 @@ class AudioPlayerViewController: UIViewController {
                     break
                 }
             }
+        } else if keyPath == "playbackBufferEmpty" {
+            print("Buffer empty")
+        } else if keyPath == "playbackLikelyToKeepUp" {
+            print("Buffer ready to keep up")
         }
     }
     
@@ -378,7 +465,9 @@ class AudioPlayerViewController: UIViewController {
                         }
                         try FileManager.default.moveItem(at: tempURL, to: destinationURL)
                         print("Download success: \(destinationURL.path)")
-                        self?.showAlert(title: "下载成功", message: "文件已保存至: \(destinationURL.path)")
+                        self?.downloadedFileURL = destinationURL
+                        self?.playLocalButton.isHidden = false
+                        self?.showAlert(title: "下载成功", message: "文件已保存，可点击\"播放本地文件\"按钮播放")
                     } catch {
                         print("File move error: \(error.localizedDescription)")
                         self?.showAlert(title: "保存失败", message: error.localizedDescription)
@@ -386,6 +475,39 @@ class AudioPlayerViewController: UIViewController {
                 }
             }
         }.resume()
+    }
+    
+    @objc private func playLocalButtonTapped() {
+        guard let fileURL = downloadedFileURL else { return }
+        
+        print("Playing local file: \(fileURL.path)")
+        
+        // 停止当前播放器
+        player?.pause()
+        if let observer = timeObserver {
+            player?.removeTimeObserver(observer)
+        }
+        player?.currentItem?.removeObserver(self, forKeyPath: "status")
+        player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
+        player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
+        
+        // 创建本地文件播放器
+        let playerItem = AVPlayerItem(url: fileURL)
+        player = AVPlayer(playerItem: playerItem)
+        
+        playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
+        
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
+            self?.updateProgress()
+        }
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
+        
+        // 自动开始播放
+        player?.play()
+        playButton.setImage(UIImage(systemName: "pause.circle.fill"), for: .normal)
+        playButton.isEnabled = true
+        statusLabel.text = "正在播放本地文件"
     }
     
     private func showAlert(title: String, message: String) {

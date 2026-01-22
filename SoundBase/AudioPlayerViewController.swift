@@ -291,12 +291,8 @@ class AudioPlayerViewController: UIViewController {
     }
     
     private func checkLocalFile() {
-        let fileName = "\(video.title.replacingOccurrences(of: "/", with: "-")).m4a"
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let fileURL = documentsPath.appendingPathComponent(fileName)
-        
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            downloadedFileURL = fileURL
+        if let downloadedAudio = AudioFileManager.shared.isDownloaded(videoId: video.videoId) {
+            downloadedFileURL = downloadedAudio.fileURL
             playLocalButton.isHidden = false
             statusLabel.text = "本地文件已存在 - 可播放"
         }
@@ -438,43 +434,29 @@ class AudioPlayerViewController: UIViewController {
         let alert = UIAlertController(title: "下载音频", message: "正在下载...", preferredStyle: .alert)
         present(alert, animated: true)
         
-        let fileName = "\(video.title.replacingOccurrences(of: "/", with: "-")).m4a"
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let destinationURL = documentsPath.appendingPathComponent(fileName)
-        
-        print("Destination: \(destinationURL.path)")
-        
-        URLSession.shared.downloadTask(with: audioURL) { [weak self] tempURL, response, error in
+        // 使用 AudioFileManager 统一管理下载
+        AudioFileManager.shared.saveAudio(
+            videoId: video.videoId,
+            title: video.title,
+            channelTitle: video.channelTitle,
+            thumbnailURL: video.thumbnailURL,
+            sourceURL: audioURL
+        ) { [weak self] result in
             DispatchQueue.main.async {
                 alert.dismiss(animated: true) {
-                    if let error = error {
+                    switch result {
+                    case .success(let audio):
+                        print("Download success: \(audio.fileURL.path)")
+                        self?.downloadedFileURL = audio.fileURL
+                        self?.playLocalButton.isHidden = false
+                        self?.showAlert(title: "下载成功", message: "音频已保存到离线列表")
+                    case .failure(let error):
                         print("Download error: \(error.localizedDescription)")
                         self?.showAlert(title: "下载失败", message: error.localizedDescription)
-                        return
-                    }
-                    
-                    guard let tempURL = tempURL else {
-                        print("Temp URL is nil")
-                        self?.showAlert(title: "下载失败", message: "临时文件不存在")
-                        return
-                    }
-                    
-                    do {
-                        if FileManager.default.fileExists(atPath: destinationURL.path) {
-                            try FileManager.default.removeItem(at: destinationURL)
-                        }
-                        try FileManager.default.moveItem(at: tempURL, to: destinationURL)
-                        print("Download success: \(destinationURL.path)")
-                        self?.downloadedFileURL = destinationURL
-                        self?.playLocalButton.isHidden = false
-                        self?.showAlert(title: "下载成功", message: "文件已保存，可点击\"播放本地文件\"按钮播放")
-                    } catch {
-                        print("File move error: \(error.localizedDescription)")
-                        self?.showAlert(title: "保存失败", message: error.localizedDescription)
                     }
                 }
             }
-        }.resume()
+        }
     }
     
     @objc private func playLocalButtonTapped() {

@@ -106,6 +106,7 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
         tableView.deselectRow(at: indexPath, animated: true)
         let audio = downloadedAudios[indexPath.row]
         let playerVC = LocalAudioPlayerViewController(audio: audio)
+        playerVC.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(playerVC, animated: true)
     }
     

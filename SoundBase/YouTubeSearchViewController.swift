@@ -179,6 +179,7 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
         tableView.deselectRow(at: indexPath, animated: true)
         let video = searchResults[indexPath.row]
         let playerVC = AudioPlayerViewController(video: video)
+        playerVC.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(playerVC, animated: true)
     }
 }

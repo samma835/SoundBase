@@ -381,13 +381,13 @@ class AudioPlayerViewController: UIViewController {
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // 设置进度圈路径 - 沿着按钮边框
+        // 设置进度路径 - 沿着按钮边框（圆角矩形）
         let buttonBounds = downloadButton.bounds
-        let center = CGPoint(x: buttonBounds.width / 2, y: buttonBounds.height / 2)
-        let radius = min(buttonBounds.width, buttonBounds.height) / 2 - 2 // 贴近边框
-        let startAngle = -CGFloat.pi / 2 // 从顶部开始
-        let endAngle = startAngle + 2 * CGFloat.pi
-        let path = UIBezierPath(arcCenter: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
+        let cornerRadius: CGFloat = downloadButton.layer.cornerRadius > 0 ? downloadButton.layer.cornerRadius : 27 // 按钮高度的一半
+        let inset: CGFloat = 2 // 距离边框的距离
+        let rect = buttonBounds.insetBy(dx: inset, dy: inset)
+        
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius - inset)
         
         downloadBackgroundLayer.path = path.cgPath
         downloadProgressLayer.path = path.cgPath

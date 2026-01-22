@@ -1,0 +1,47 @@
+PODS:
+  - CoreStore (9.2.0)
+  - Localize-Swift (3.2.0):
+    - Localize-Swift/LocalizeSwiftCore (= 3.2.0)
+    - Localize-Swift/UIKit (= 3.2.0)
+  - Localize-Swift/LocalizeSwiftCore (3.2.0)
+  - Localize-Swift/UIKit (3.2.0):
+    - Localize-Swift/LocalizeSwiftCore
+  - SnapKit (5.7.1)
+  - SwipeCellKit (2.7.1)
+  - UMAPM (2.0.3):
+    - UMCommon
+  - UMCommon (7.5.2):
+    - UMDevice
+  - UMDevice (3.4.0)
+
+DEPENDENCIES:
+  - CoreStore (~> 9.1)
+  - Localize-Swift (~> 3.2)
+  - SnapKit (~> 5.7.1)
+  - SwipeCellKit
+  - UMAPM
+  - UMCommon
+  - UMDevice
+
+SPEC REPOS:
+  trunk:
+    - CoreStore
+    - Localize-Swift
+    - SnapKit
+    - SwipeCellKit
+    - UMAPM
+    - UMCommon
+    - UMDevice
+
+SPEC CHECKSUMS:
+  CoreStore: 6e7e2010ce7b8ad9cf7348c650020c3d7ea0afb2
+  Localize-Swift: 6f4475136bdb0d7b2882ea3d4ea919d70142b232
+  SnapKit: d612e99e678a2d3b95bf60b0705ed0a35c03484a
+  SwipeCellKit: 3972254a826da74609926daf59b08d6c72e619ea
+  UMAPM: 6986ecc2d2a568c90d9bea3227b507b615ca28bd
+  UMCommon: 72513a01ebca2dead52f2112b4d7c6196dbbe412
+  UMDevice: dcdf7ec167387837559d149fbc7d793d984faf82
+
+PODFILE CHECKSUM: c61e31e256912190514bf2d7c3c44c97db80fa3d
+
+COCOAPODS: 1.15.2

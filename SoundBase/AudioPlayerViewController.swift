@@ -9,6 +9,7 @@ import UIKit
 import SnapKit
 import YouTubeKit
 import AVFoundation
+import MediaPlayer
 
 class AudioPlayerViewController: UIViewController {
     
@@ -17,6 +18,9 @@ class AudioPlayerViewController: UIViewController {
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var downloadedFileURL: URL?
+    private var isDownloading = false
+    private var lastLoggedDuration: Double = 0
+    private var thumbnailImage: UIImage?
     
     private lazy var thumbnailImageView: UIImageView = {
         let imageView = UIImageView()
@@ -89,6 +93,27 @@ class AudioPlayerViewController: UIViewController {
         return button
     }()
     
+    private lazy var downloadProgressLayer: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.fillColor = UIColor.clear.cgColor
+        layer.strokeColor = UIColor.systemBlue.cgColor
+        layer.lineWidth = 4
+        layer.lineCap = .round
+        layer.strokeEnd = 0
+        layer.isHidden = true
+        return layer
+    }()
+    
+    private lazy var downloadBackgroundLayer: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.fillColor = UIColor.clear.cgColor
+        layer.strokeColor = UIColor.systemGray5.cgColor
+        layer.lineWidth = 4
+        layer.lineCap = .round
+        layer.isHidden = true
+        return layer
+    }()
+    
     private lazy var playLocalButton: UIButton = {
         let button = UIButton(type: .system)
         button.setTitle("播放本地文件", for: .normal)
@@ -125,23 +150,136 @@ class AudioPlayerViewController: UIViewController {
         super.viewDidLoad()
         setupUI()
         setupAudioSession()
+        setupRemoteCommandCenter()
         loadVideoInfo()
+        checkDownloadStatus()
+        setupNotifications()
         extractAudio()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        checkDownloadStatus()
     }
     
     private func setupAudioSession() {
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default)
+            // 设置为播放类别，支持后台播放
+            try audioSession.setCategory(.playback, mode: .default, options: [])
             try audioSession.setActive(true)
+            print("✅ [Audio Session] 已配置后台播放支持")
         } catch {
-            print("Failed to set up audio session: \(error.localizedDescription)")
+            print("❌ [Audio Session] 配置失败: \(error.localizedDescription)")
         }
+    }
+    
+    private func setupRemoteCommandCenter() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        
+        // 播放命令
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { [weak self] _ in
+            self?.player?.play()
+            self?.updatePlayButton(isPlaying: true)
+            return .success
+        }
+        
+        // 暂停命令
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] _ in
+            self?.player?.pause()
+            self?.updatePlayButton(isPlaying: false)
+            return .success
+        }
+        
+        // 下一曲（可选，暂时禁用）
+        commandCenter.nextTrackCommand.isEnabled = false
+        
+        // 上一曲（可选，暂时禁用）
+        commandCenter.previousTrackCommand.isEnabled = false
+        
+        // 进度调整
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self = self,
+                  let event = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            
+            let time = CMTime(seconds: event.positionTime, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+            self.player?.seek(to: time)
+            return .success
+        }
+        
+        print("✅ [Remote Command] 已配置控制中心")
+    }
+    
+    private func updateNowPlayingInfo() {
+        guard let player = player,
+              let currentItem = player.currentItem else {
+            return
+        }
+        
+        var nowPlayingInfo = [String: Any]()
+        nowPlayingInfo[MPMediaItemPropertyTitle] = video.title
+        nowPlayingInfo[MPMediaItemPropertyArtist] = video.channelTitle
+        
+        // 设置时长
+        let duration = getDuration(from: currentItem)
+        if duration > 0 {
+            nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        
+        // 设置当前播放时间
+        let currentTime = CMTimeGetSeconds(player.currentTime())
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+        
+        // 设置播放速率
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player.rate
+        
+        // 设置封面图
+        if let thumbnailImage = thumbnailImage {
+            let artwork = MPMediaItemArtwork(boundsSize: thumbnailImage.size) { _ in
+                return thumbnailImage
+            }
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        }
+        
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+    
+    private func getDuration(from item: AVPlayerItem) -> Double {
+        // 使用和 updateProgress 相同的逻辑获取 duration
+        var duration: Double = 0
+        
+        if let seekable = item.seekableTimeRanges.last as? CMTimeRange {
+            duration = CMTimeGetSeconds(seekable.end)
+            if duration > 0 && !duration.isNaN && !duration.isInfinite {
+                return duration
+            }
+        }
+        
+        if let asset = item.asset as? AVURLAsset,
+           let audioTrack = asset.tracks(withMediaType: .audio).first {
+            duration = CMTimeGetSeconds(audioTrack.timeRange.duration)
+            if duration > 0 && !duration.isNaN && !duration.isInfinite {
+                return duration
+            }
+        }
+        
+        let rawDuration = CMTimeGetSeconds(item.duration)
+        if rawDuration > 0 && !rawDuration.isNaN && !rawDuration.isInfinite {
+            return rawDuration / 2.0
+        }
+        
+        return 0
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        player?.pause()
+        // 不要暂停播放，支持后台继续播放
+        // player?.pause()
     }
     
     deinit {
@@ -151,6 +289,7 @@ class AudioPlayerViewController: UIViewController {
         player?.currentItem?.removeObserver(self, forKeyPath: "status")
         player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
         player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
+        NotificationCenter.default.removeObserver(self)
     }
     
     private func setupUI() {
@@ -232,8 +371,26 @@ class AudioPlayerViewController: UIViewController {
             make.center.equalTo(playButton)
         }
         
+        // 添加进度圈到下载按钮
+        downloadButton.layer.insertSublayer(downloadBackgroundLayer, at: 0)
+        downloadButton.layer.insertSublayer(downloadProgressLayer, at: 1)
+        
         playButton.isEnabled = false
         downloadButton.isEnabled = false
+    }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // 设置进度圈路径 - 沿着按钮边框
+        let buttonBounds = downloadButton.bounds
+        let center = CGPoint(x: buttonBounds.width / 2, y: buttonBounds.height / 2)
+        let radius = min(buttonBounds.width, buttonBounds.height) / 2 - 2 // 贴近边框
+        let startAngle = -CGFloat.pi / 2 // 从顶部开始
+        let endAngle = startAngle + 2 * CGFloat.pi
+        let path = UIBezierPath(arcCenter: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
+        
+        downloadBackgroundLayer.path = path.cgPath
+        downloadProgressLayer.path = path.cgPath
     }
     
     private func loadVideoInfo() {
@@ -290,7 +447,7 @@ class AudioPlayerViewController: UIViewController {
                     }
                     self.downloadButton.isEnabled = true
                     self.activityIndicator.stopAnimating()
-                    self.checkLocalFile()
+                    self.checkDownloadStatus()
                 }
             } catch {
                 print("Extract audio error: \(error)")
@@ -299,14 +456,6 @@ class AudioPlayerViewController: UIViewController {
                     self.activityIndicator.stopAnimating()
                 }
             }
-        }
-    }
-    
-    private func checkLocalFile() {
-        if let downloadedAudio = AudioFileManager.shared.isDownloaded(videoId: video.videoId) {
-            downloadedFileURL = downloadedAudio.fileURL
-            playLocalButton.isHidden = false
-            statusLabel.text = "本地文件已存在 - 可播放"
         }
     }
     
@@ -382,20 +531,33 @@ class AudioPlayerViewController: UIViewController {
               let currentItem = player.currentItem else { return }
         
         let currentTime = CMTimeGetSeconds(player.currentTime())
-        let duration = CMTimeGetSeconds(currentItem.duration)
         
-        // 添加日志查看实际时长
+        // 修复 duration 翻倍问题 - 按优先级尝试不同方法
+        let duration = getDuration(from: currentItem)
+        
+        // 更新UI
         if duration > 0 && !duration.isNaN && !duration.isInfinite {
-            // 只在第一次或时长变化时打印
-            var lastLoggedDuration: Double = 0
-            if abs(lastLoggedDuration - duration) > 1 {
-                print("Duration: \(duration) seconds (\(formatTime(duration)))")
-                lastLoggedDuration = duration
-            }
-            
             progressSlider.value = Float(currentTime / duration)
             currentTimeLabel.text = formatTime(currentTime)
             durationLabel.text = formatTime(duration)
+            
+            // 日志输出（仅在变化时）
+            if abs(lastLoggedDuration - duration) > 1 {
+                if let seekable = currentItem.seekableTimeRanges.last as? CMTimeRange,
+                   CMTimeGetSeconds(seekable.end) == duration {
+                    print("✅ [Duration] 使用 seekableTimeRanges: \(duration) 秒 (\(formatTime(duration)))")
+                } else if let asset = currentItem.asset as? AVURLAsset,
+                          let audioTrack = asset.tracks(withMediaType: .audio).first,
+                          CMTimeGetSeconds(audioTrack.timeRange.duration) == duration {
+                    print("✅ [Duration] 使用 audioTrack: \(duration) 秒 (\(formatTime(duration)))")
+                } else {
+                    print("⚠️ [Duration] 使用 duration/2 workaround: \(duration) 秒 (\(formatTime(duration)))")
+                }
+                lastLoggedDuration = duration
+            }
+            
+            // 更新控制中心信息
+            updateNowPlayingInfo()
         }
     }
     
@@ -410,6 +572,8 @@ class AudioPlayerViewController: UIViewController {
             guard let data = data, let image = UIImage(data: data) else { return }
             DispatchQueue.main.async {
                 self?.thumbnailImageView.image = image
+                self?.thumbnailImage = image
+                self?.updateNowPlayingInfo() // 更新控制中心封面
             }
         }.resume()
     }
@@ -420,17 +584,27 @@ class AudioPlayerViewController: UIViewController {
             return
         }
         
-        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
         if player.timeControlStatus == .playing {
             player.pause()
-            playButton.setImage(UIImage(systemName: "play.fill", withConfiguration: config), for: .normal)
-            playButton.setTitle("  播放", for: .normal)
+            updatePlayButton(isPlaying: false)
             print("Paused")
         } else {
             player.play()
+            updatePlayButton(isPlaying: true)
+            print("Playing")
+        }
+        
+        updateNowPlayingInfo()
+    }
+    
+    private func updatePlayButton(isPlaying: Bool) {
+        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+        if isPlaying {
             playButton.setImage(UIImage(systemName: "pause.fill", withConfiguration: config), for: .normal)
             playButton.setTitle("  暂停", for: .normal)
-            print("Playing")
+        } else {
+            playButton.setImage(UIImage(systemName: "play.fill", withConfiguration: config), for: .normal)
+            playButton.setTitle("  播放", for: .normal)
         }
     }
     
@@ -444,10 +618,124 @@ class AudioPlayerViewController: UIViewController {
     }
     
     @objc private func playerDidFinishPlaying() {
-        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
-        playButton.setImage(UIImage(systemName: "play.fill", withConfiguration: config), for: .normal)
-        playButton.setTitle("  播放", for: .normal)
+        updatePlayButton(isPlaying: false)
         player?.seek(to: .zero)
+        updateNowPlayingInfo()
+    }
+    
+    private func setupNotifications() {
+        // 监听下载进度
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(downloadProgressUpdated(_:)),
+            name: .downloadProgressUpdated,
+            object: nil
+        )
+        
+        // 监听下载完成
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(downloadCompleted(_:)),
+            name: .downloadCompleted,
+            object: nil
+        )
+        
+        // 监听下载失败
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(downloadFailed(_:)),
+            name: .downloadFailed,
+            object: nil
+        )
+    }
+    
+    private func checkDownloadStatus() {
+        // 检查是否已下载
+        if let downloadedAudio = AudioFileManager.shared.isDownloaded(videoId: video.videoId) {
+            downloadedFileURL = downloadedAudio.fileURL
+            playLocalButton.isHidden = false
+            updateDownloadButtonState(downloaded: true)
+            print("✅ [下载状态] 已下载")
+        } else if isDownloading {
+            updateDownloadButtonState(downloading: true)
+            print("⏳ [下载状态] 下载中")
+        } else {
+            updateDownloadButtonState(downloaded: false)
+            print("📥 [下载状态] 未下载")
+        }
+    }
+    
+    private func updateDownloadButtonState(downloaded: Bool = false, downloading: Bool = false) {
+        let config = UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
+        
+        if downloaded {
+            downloadButton.setImage(UIImage(systemName: "checkmark.circle.fill", withConfiguration: config), for: .normal)
+            downloadButton.setTitle("  已下载", for: .normal)
+            downloadButton.tintColor = .systemGreen
+            downloadButton.isEnabled = false
+            downloadBackgroundLayer.isHidden = true
+            downloadProgressLayer.isHidden = true
+        } else if downloading {
+            downloadButton.setImage(UIImage(systemName: "arrow.down.circle.fill", withConfiguration: config), for: .normal)
+            downloadButton.setTitle("  下载中", for: .normal)
+            downloadButton.tintColor = .systemBlue
+            downloadButton.isEnabled = false
+            downloadBackgroundLayer.isHidden = false
+            downloadProgressLayer.isHidden = false
+        } else {
+            downloadButton.setImage(UIImage(systemName: "arrow.down.circle.fill", withConfiguration: config), for: .normal)
+            downloadButton.setTitle("  下载", for: .normal)
+            downloadButton.tintColor = .systemBlue
+            downloadButton.isEnabled = true
+            downloadBackgroundLayer.isHidden = true
+            downloadProgressLayer.isHidden = true
+            downloadProgressLayer.strokeEnd = 0
+        }
+    }
+    
+    @objc private func downloadProgressUpdated(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let videoId = userInfo["videoId"] as? String,
+              videoId == video.videoId,
+              let progress = userInfo["progress"] as? Double else {
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.downloadProgressLayer.strokeEnd = CGFloat(progress)
+        }
+    }
+    
+    @objc private func downloadCompleted(_ notification: Notification) {
+        guard let audio = notification.object as? DownloadedAudio,
+              audio.videoId == video.videoId else {
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.isDownloading = false
+            self.downloadedFileURL = audio.fileURL
+            self.playLocalButton.isHidden = false
+            self.updateDownloadButtonState(downloaded: true)
+            
+            // 显示成功提示
+            let successAlert = UIAlertController(title: "✅ 下载完成", message: "音频已保存到离线列表", preferredStyle: .alert)
+            successAlert.addAction(UIAlertAction(title: "确定", style: .default))
+            self.present(successAlert, animated: true)
+        }
+    }
+    
+    @objc private func downloadFailed(_ notification: Notification) {
+        DispatchQueue.main.async {
+            self.isDownloading = false
+            self.updateDownloadButtonState(downloaded: false)
+            
+            if let error = notification.object as? Error {
+                let errorAlert = UIAlertController(title: "下载失败", message: error.localizedDescription, preferredStyle: .alert)
+                errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                self.present(errorAlert, animated: true)
+            }
+        }
     }
     
     @objc private func downloadButtonTapped() {
@@ -463,13 +751,13 @@ class AudioPlayerViewController: UIViewController {
         present(hud, animated: true)
         
         // 1秒后自动关闭提示
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             hud.dismiss(animated: true)
         }
         
-        // 更新按钮状态
-        downloadButton.isEnabled = false
-        downloadButton.setTitle("  下载中...", for: .normal)
+        // 更新状态
+        isDownloading = true
+        updateDownloadButtonState(downloading: true)
         
         // 开始后台下载
         AudioFileManager.shared.saveAudio(
@@ -481,29 +769,9 @@ class AudioPlayerViewController: UIViewController {
         ) { [weak self] result in
             guard let self = self else { return }
             
-            DispatchQueue.main.async {
-                self.downloadButton.isEnabled = true
-                self.downloadButton.setTitle("  下载", for: .normal)
-                
-                switch result {
-                case .success(let audio):
-                    print("Download success: \(audio.fileURL.path)")
-                    self.downloadedFileURL = audio.fileURL
-                    self.playLocalButton.isHidden = false
-                    
-                    // 显示成功提示
-                    let successAlert = UIAlertController(title: "✅ 下载完成", message: "音频已保存到离线列表", preferredStyle: .alert)
-                    successAlert.addAction(UIAlertAction(title: "确定", style: .default))
-                    self.present(successAlert, animated: true)
-                    
-                case .failure(let error):
-                    print("Download error: \(error.localizedDescription)")
-                    
-                    // 显示失败提示
-                    let errorAlert = UIAlertController(title: "下载失败", message: error.localizedDescription, preferredStyle: .alert)
-                    errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
-                    self.present(errorAlert, animated: true)
-                }
+            // 注意：成功和失败都通过通知处理，这里不需要额外处理
+            if case .failure(let error) = result {
+                print("Download error: \(error.localizedDescription)")
             }
         }
     }
@@ -537,11 +805,12 @@ class AudioPlayerViewController: UIViewController {
         
         // 自动开始播放
         player?.play()
-        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
-        playButton.setImage(UIImage(systemName: "pause.fill", withConfiguration: config), for: .normal)
-        playButton.setTitle("  暂停", for: .normal)
+        updatePlayButton(isPlaying: true)
         playButton.isEnabled = true
         statusLabel.text = "正在播放本地文件"
+        
+        // 更新控制中心信息
+        updateNowPlayingInfo()
     }
     
     private func showAlert(title: String, message: String) {

@@ -12,9 +12,15 @@ struct DownloadedAudio: Codable {
     let videoId: String
     let title: String
     let channelTitle: String
-    let fileURL: URL
+    let fileName: String  // 只存储文件名，不存储绝对路径
     let downloadDate: Date
     let thumbnailURL: URL?
+    
+    // 动态计算文件完整路径
+    var fileURL: URL {
+        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsDirectory.appendingPathComponent(fileName)
+    }
 }
 
 // 下载任务状态
@@ -121,7 +127,7 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
                 videoId: downloadInfo.videoId,
                 title: downloadInfo.title,
                 channelTitle: downloadInfo.channelTitle,
-                fileURL: destinationURL,
+                fileName: destinationURL.lastPathComponent,  // 只存储文件名
                 downloadDate: Date(),
                 thumbnailURL: downloadInfo.thumbnailURL
             )
@@ -279,6 +285,14 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         
         do {
             let data = try Data(contentsOf: metadataURL)
+            
+            // 检查文件是否为空
+            if data.isEmpty {
+                print("⚠️ [持久化] 元数据文件为空，删除并返回空数组")
+                try? FileManager.default.removeItem(at: metadataURL)
+                return []
+            }
+            
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
             let audios = try decoder.decode([DownloadedAudio].self, from: data)
@@ -306,8 +320,15 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             }
             
             return validAudios
+        } catch let error as DecodingError {
+            print("❌ [持久化] JSON解码失败: \(error)")
+            print("⚠️ [持久化] 元数据文件损坏，删除并返回空数组")
+            try? FileManager.default.removeItem(at: metadataURL)
+            return []
         } catch {
             print("❌ [持久化] 加载失败: \(error.localizedDescription)")
+            print("⚠️ [持久化] 删除损坏的元数据文件")
+            try? FileManager.default.removeItem(at: metadataURL)
             return []
         }
     }

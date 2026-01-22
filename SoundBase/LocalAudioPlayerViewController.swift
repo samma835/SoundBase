@@ -87,7 +87,8 @@ class LocalAudioPlayerViewController: UIViewController {
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        player?.pause()
+        // 不要暂停播放，支持后台继续播放
+        // player?.pause()
     }
     
     deinit {

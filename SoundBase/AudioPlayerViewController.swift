@@ -656,10 +656,13 @@ class AudioPlayerViewController: UIViewController {
             playLocalButton.isHidden = false
             updateDownloadButtonState(downloaded: true)
             print("✅ [下载状态] 已下载")
-        } else if isDownloading {
+        } else if AudioFileManager.shared.isDownloading(videoId: video.videoId) {
+            // 从全局状态检查是否正在下载
+            isDownloading = true
             updateDownloadButtonState(downloading: true)
             print("⏳ [下载状态] 下载中")
         } else {
+            isDownloading = false
             updateDownloadButtonState(downloaded: false)
             print("📥 [下载状态] 未下载")
         }

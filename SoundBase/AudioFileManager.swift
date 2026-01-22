@@ -39,6 +39,9 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     private var urlSession: URLSession!
     private var activeDownloads: [String: (completion: (Result<DownloadedAudio, Error>) -> Void, startTime: Date, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, destinationURL: URL)] = [:]
     
+    // 跟踪正在下载的videoId
+    private var downloadingVideoIds: Set<String> = []
+    
     override private init() {
         super.init()
         // 使用后台配置，支持退出后继续下载
@@ -74,6 +77,9 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             thumbnailURL: thumbnailURL,
             destinationURL: destinationURL
         )
+        
+        // 标记为下载中
+        downloadingVideoIds.insert(videoId)
         
         task.resume()
         print("📥 [下载] 下载任务已启动 (ID: \(taskIdentifier))")
@@ -140,6 +146,8 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             }
         }
         
+        // 移除下载状态
+        downloadingVideoIds.remove(downloadInfo.videoId)
         activeDownloads.removeValue(forKey: taskIdentifier)
     }
     
@@ -181,6 +189,8 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
                     NotificationCenter.default.post(name: .downloadFailed, object: error)
                     downloadInfo.completion(.failure(error))
                 }
+                // 移除下载状态
+                downloadingVideoIds.remove(downloadInfo.videoId)
                 activeDownloads.removeValue(forKey: taskIdentifier)
             }
         }
@@ -213,6 +223,11 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     // 检查是否已下载
     func isDownloaded(videoId: String) -> DownloadedAudio? {
         return getAllDownloadedAudios().first { $0.videoId == videoId }
+    }
+    
+    // 检查是否正在下载
+    func isDownloading(videoId: String) -> Bool {
+        return downloadingVideoIds.contains(videoId)
     }
     
     // MARK: - Private Methods

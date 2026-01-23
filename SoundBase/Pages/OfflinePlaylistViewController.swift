@@ -117,14 +117,6 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
             return
         }
         
-        // 从 DownloadedAudio 构造 VideoSearchResult
-        let videoResult = VideoSearchResult(
-            videoId: audio.videoId,
-            title: audio.title,
-            channelTitle: audio.channelTitle,
-            thumbnailURL: audio.thumbnailURL
-        )
-        
         // 加载缩略图
         var artwork: UIImage?
         if let thumbnailURL = audio.thumbnailURL,
@@ -133,20 +125,14 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
             artwork = image
         }
         
-        // 使用播放器管理器播放本地文件
-        MediaPlayerManager.shared.play(
-            url: audio.fileURL,
+        // 添加到播放列表并播放
+        PlaylistManager.shared.addAndPlay(
+            videoId: audio.videoId,
             title: audio.title,
             artist: audio.channelTitle,
+            thumbnailURL: audio.thumbnailURL,
+            audioURL: audio.fileURL,
             artwork: artwork
-        )
-        
-        // 显示全局播放器
-        GlobalPlayerContainer.shared.show(
-            title: audio.title,
-            artist: audio.channelTitle,
-            artwork: artwork,
-            video: videoResult
         )
         
         print("🎵 [离线播放] 开始播放: \(audio.title)")

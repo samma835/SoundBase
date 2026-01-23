@@ -30,6 +30,9 @@ class GlobalPlayerContainer {
         miniPlayer.onTap = { [weak self] in
             self?.showPlayerDetail()
         }
+        miniPlayer.onPlaylistTap = { [weak self] in
+            self?.showPlaylist()
+        }
         
         viewController.view.addSubview(miniPlayer)
         
@@ -111,6 +114,20 @@ class GlobalPlayerContainer {
         selectedNav.pushViewController(playerVC, animated: true)
         
         print("📱 [全局播放器] 进入播放器详情页: \(video.title)")
+    }
+    
+    private func showPlaylist() {
+        // 从当前显示的 navigation controller 推入播放列表页
+        guard let tabBarController = containerViewController as? UITabBarController,
+              let selectedNav = tabBarController.selectedViewController as? UINavigationController else {
+            print("📱 [全局播放器] 无法获取导航控制器")
+            return
+        }
+        
+        let playlistVC = PlaylistViewController()
+        selectedNav.pushViewController(playlistVC, animated: true)
+        
+        print("📱 [全局播放器] 打开播放列表")
     }
     
     @objc private func playbackStateChanged(_ notification: Notification) {

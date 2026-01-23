@@ -46,6 +46,15 @@ class MiniPlayerView: UIView {
         return button
     }()
     
+    private lazy var playlistButton: UIButton = {
+        let button = UIButton(type: .system)
+        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        button.setImage(UIImage(systemName: "list.bullet", withConfiguration: config), for: .normal)
+        button.tintColor = .label
+        button.addTarget(self, action: #selector(playlistButtonTapped), for: .touchUpInside)
+        return button
+    }()
+    
     private lazy var progressView: UIProgressView = {
         let progress = UIProgressView(progressViewStyle: .bar)
         progress.trackTintColor = .systemGray5
@@ -54,6 +63,7 @@ class MiniPlayerView: UIView {
     }()
     
     var onTap: (() -> Void)?
+    var onPlaylistTap: (() -> Void)?
     
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -81,6 +91,7 @@ class MiniPlayerView: UIView {
         addSubview(thumbnailImageView)
         addSubview(titleLabel)
         addSubview(artistLabel)
+        addSubview(playlistButton)
         addSubview(playButton)
         
         progressView.snp.makeConstraints { make in
@@ -97,13 +108,19 @@ class MiniPlayerView: UIView {
         titleLabel.snp.makeConstraints { make in
             make.left.equalTo(thumbnailImageView.snp.right).offset(12)
             make.top.equalTo(thumbnailImageView).offset(4)
-            make.right.equalTo(playButton.snp.left).offset(-12)
+            make.right.equalTo(playlistButton.snp.left).offset(-8)
         }
         
         artistLabel.snp.makeConstraints { make in
             make.left.equalTo(titleLabel)
             make.bottom.equalTo(thumbnailImageView).offset(-4)
             make.right.equalTo(titleLabel)
+        }
+        
+        playlistButton.snp.makeConstraints { make in
+            make.right.equalTo(playButton.snp.left).offset(-8)
+            make.centerY.equalToSuperview()
+            make.width.height.equalTo(40)
         }
         
         playButton.snp.makeConstraints { make in
@@ -159,6 +176,10 @@ class MiniPlayerView: UIView {
     
     @objc private func playButtonTapped() {
         playerManager.togglePlayPause()
+    }
+    
+    @objc private func playlistButtonTapped() {
+        onPlaylistTap?()
     }
     
     @objc private func viewTapped() {

@@ -463,6 +463,36 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         print("🧹 [清理] 已清理所有已完成的下载")
     }
     
+    // 更新音频标题
+    func updateAudioTitle(videoId: String, newTitle: String) throws {
+        var audios = loadMetadata()
+        
+        guard let index = audios.firstIndex(where: { $0.videoId == videoId }) else {
+            throw NSError(domain: "AudioFileManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "未找到该音频"])
+        }
+        
+        let audio = audios[index]
+        let updatedAudio = DownloadedAudio(
+            videoId: audio.videoId,
+            title: newTitle,
+            channelTitle: audio.channelTitle,
+            fileName: audio.fileName,
+            downloadDate: audio.downloadDate,
+            thumbnailURL: audio.thumbnailURL
+        )
+        
+        audios[index] = updatedAudio
+        
+        let metadataURL = documentsDirectory.appendingPathComponent(metadataFileName)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = .prettyPrinted
+        let data = try encoder.encode(audios)
+        try data.write(to: metadataURL, options: .atomic)
+        
+        print("✏️ [文件管理] 已更新标题: \(newTitle)")
+    }
+    
     // MARK: - Private Methods
     
     private func sanitizeFileName(_ fileName: String) -> String {

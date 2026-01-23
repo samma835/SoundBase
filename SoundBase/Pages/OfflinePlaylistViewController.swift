@@ -106,6 +106,17 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
         tableView.deselectRow(at: indexPath, animated: true)
         let audio = downloadedAudios[indexPath.row]
         
+        // 直接播放离线音频
+        playOfflineAudio(audio)
+    }
+    
+    private func playOfflineAudio(_ audio: DownloadedAudio) {
+        // 检查文件是否存在
+        guard FileManager.default.fileExists(atPath: audio.fileURL.path) else {
+            showAlert(title: "播放失败", message: "音频文件不存在")
+            return
+        }
+        
         // 从 DownloadedAudio 构造 VideoSearchResult
         let videoResult = VideoSearchResult(
             videoId: audio.videoId,
@@ -114,17 +125,87 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
             thumbnailURL: audio.thumbnailURL
         )
         
-        let playerVC = AudioPlayerViewController(video: videoResult)
-        playerVC.hidesBottomBarWhenPushed = true
-        navigationController?.pushViewController(playerVC, animated: true)
+        // 加载缩略图
+        var artwork: UIImage?
+        if let thumbnailURL = audio.thumbnailURL,
+           let data = try? Data(contentsOf: thumbnailURL),
+           let image = UIImage(data: data) {
+            artwork = image
+        }
+        
+        // 使用播放器管理器播放本地文件
+        MediaPlayerManager.shared.play(
+            url: audio.fileURL,
+            title: audio.title,
+            artist: audio.channelTitle,
+            artwork: artwork
+        )
+        
+        // 显示全局播放器
+        GlobalPlayerContainer.shared.show(
+            title: audio.title,
+            artist: audio.channelTitle,
+            artwork: artwork,
+            video: videoResult
+        )
+        
+        print("🎵 [离线播放] 开始播放: \(audio.title)")
     }
     
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        // 删除操作
         let deleteAction = UIContextualAction(style: .destructive, title: "删除") { [weak self] _, _, completionHandler in
             self?.deleteAudio(at: indexPath)
             completionHandler(true)
         }
-        return UISwipeActionsConfiguration(actions: [deleteAction])
+        deleteAction.image = UIImage(systemName: "trash")
+        
+        // 重命名操作
+        let renameAction = UIContextualAction(style: .normal, title: "重命名") { [weak self] _, _, completionHandler in
+            self?.renameAudio(at: indexPath)
+            completionHandler(true)
+        }
+        renameAction.backgroundColor = .systemBlue
+        renameAction.image = UIImage(systemName: "pencil")
+        
+        return UISwipeActionsConfiguration(actions: [deleteAction, renameAction])
+    }
+    
+    private func renameAudio(at indexPath: IndexPath) {
+        let audio = downloadedAudios[indexPath.row]
+        
+        let alert = UIAlertController(title: "重命名音频", message: nil, preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.text = audio.title
+            textField.placeholder = "输入新名称"
+        }
+        
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak self, weak alert] _ in
+            guard let newTitle = alert?.textFields?[0].text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !newTitle.isEmpty else {
+                self?.showAlert(title: "重命名失败", message: "名称不能为空")
+                return
+            }
+            
+            do {
+                try AudioFileManager.shared.updateAudioTitle(videoId: audio.videoId, newTitle: newTitle)
+                self?.downloadedAudios[indexPath.row] = DownloadedAudio(
+                    videoId: audio.videoId,
+                    title: newTitle,
+                    channelTitle: audio.channelTitle,
+                    fileName: audio.fileName,
+                    downloadDate: audio.downloadDate,
+                    thumbnailURL: audio.thumbnailURL
+                )
+                self?.tableView.reloadRows(at: [indexPath], with: .automatic)
+                print("✏️ [离线音频] 重命名成功: \(newTitle)")
+            } catch {
+                self?.showAlert(title: "重命名失败", message: error.localizedDescription)
+            }
+        })
+        
+        present(alert, animated: true)
     }
 }
 

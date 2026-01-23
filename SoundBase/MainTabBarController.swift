@@ -12,6 +12,7 @@ class MainTabBarController: UITabBarController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupTabBar()
+        setupGlobalPlayer()
     }
     
     private func setupTabBar() {
@@ -33,5 +34,9 @@ class MainTabBarController: UITabBarController {
         viewControllers = [searchNav, offlineNav, settingsNav]
         
         tabBar.tintColor = .systemBlue
+    }
+    
+    private func setupGlobalPlayer() {
+        GlobalPlayerContainer.shared.setup(in: self)
     }
 }

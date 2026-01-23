@@ -1,0 +1,128 @@
+//
+//  GlobalPlayerContainer.swift
+//  SoundBase
+//
+//  Created by samma on 2026/1/23.
+//
+
+import UIKit
+import SnapKit
+
+class GlobalPlayerContainer {
+    static let shared = GlobalPlayerContainer()
+    
+    private var miniPlayerView: MiniPlayerView?
+    private weak var containerViewController: UIViewController?
+    private let miniPlayerHeight: CGFloat = 64
+    
+    // 保存当前播放的视频信息
+    var currentVideo: VideoSearchResult?
+    
+    private init() {}
+    
+    func setup(in viewController: UIViewController) {
+        containerViewController = viewController
+        
+        // 创建 mini player
+        let miniPlayer = MiniPlayerView()
+        miniPlayer.isHidden = true
+        miniPlayer.onTap = { [weak self] in
+            self?.showPlayerDetail()
+        }
+        
+        viewController.view.addSubview(miniPlayer)
+        miniPlayer.snp.makeConstraints { make in
+            make.left.right.equalToSuperview()
+            make.bottom.equalTo(viewController.view.safeAreaLayoutGuide.snp.bottom)
+            make.height.equalTo(miniPlayerHeight)
+        }
+        
+        miniPlayerView = miniPlayer
+        
+        // 监听播放器状态
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playbackStateChanged),
+            name: MediaPlayerManager.playbackStateChangedNotification,
+            object: nil
+        )
+    }
+    
+    func show(title: String?, artist: String?, artwork: UIImage?, video: VideoSearchResult? = nil) {
+        if let video = video {
+            currentVideo = video
+        }
+        
+        miniPlayerView?.updateInfo(title: title, artist: artist, artwork: artwork)
+        
+        guard miniPlayerView?.isHidden == true else { return }
+        
+        UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
+            self.miniPlayerView?.isHidden = false
+            self.miniPlayerView?.alpha = 1
+            
+            // 调整 tab bar controller 的内容区域
+            if let tabBarController = self.containerViewController as? UITabBarController {
+                tabBarController.additionalSafeAreaInsets.bottom = self.miniPlayerHeight
+            }
+        }
+    }
+    
+    func hide() {
+        UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseIn) {
+            self.miniPlayerView?.alpha = 0
+            
+            // 恢复 tab bar controller 的内容区域
+            if let tabBarController = self.containerViewController as? UITabBarController {
+                tabBarController.additionalSafeAreaInsets.bottom = 0
+            }
+        } completion: { _ in
+            self.miniPlayerView?.isHidden = true
+        }
+    }
+    
+    func updateInfo(title: String?, artist: String?, artwork: UIImage?, video: VideoSearchResult? = nil) {
+        if let video = video {
+            currentVideo = video
+        }
+        miniPlayerView?.updateInfo(title: title, artist: artist, artwork: artwork)
+    }
+    
+    private func showPlayerDetail() {
+        // 从当前显示的 navigation controller 推入播放器详情页
+        guard let tabBarController = containerViewController as? UITabBarController,
+              let selectedNav = tabBarController.selectedViewController as? UINavigationController,
+              let video = currentVideo else {
+            print("📱 [全局播放器] 无法获取导航控制器或视频信息")
+            return
+        }
+        
+        // 检查当前是否已经在播放器页面
+        if let topVC = selectedNav.topViewController as? AudioPlayerViewController {
+            print("📱 [全局播放器] 已经在播放器详情页")
+            return
+        }
+        
+        // 推入播放器详情页
+        let playerVC = AudioPlayerViewController(video: video)
+        playerVC.hidesBottomBarWhenPushed = true
+        selectedNav.pushViewController(playerVC, animated: true)
+        
+        print("📱 [全局播放器] 进入播放器详情页: \(video.title)")
+    }
+    
+    @objc private func playbackStateChanged(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let isPlaying = userInfo["isPlaying"] as? Bool else { return }
+        
+        // 当开始播放时显示 mini player
+        if isPlaying && miniPlayerView?.isHidden == true {
+            let playerManager = MediaPlayerManager.shared
+            show(
+                title: playerManager.currentTitle,
+                artist: playerManager.currentArtist,
+                artwork: playerManager.currentArtwork
+            )
+        }
+    }
+}

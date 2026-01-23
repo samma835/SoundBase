@@ -405,12 +405,23 @@ class AudioPlayerViewController: UIViewController {
             setupPlayer()
             // 等待一小段时间让播放器准备好
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.playerManager.play()
+                guard let self = self else { return }
+                self.playerManager.play()
+                self.showGlobalPlayer()
             }
         } else {
             // 切换播放/暂停
             playerManager.togglePlayPause()
         }
+    }
+    
+    private func showGlobalPlayer() {
+        GlobalPlayerContainer.shared.show(
+            title: video.title,
+            artist: video.channelTitle,
+            artwork: thumbnailImage,
+            video: video
+        )
     }
     
     // 检查当前播放的是否是这个视频的音频
@@ -660,6 +671,14 @@ class AudioPlayerViewController: UIViewController {
         
         playButton.isEnabled = true
         statusLabel.text = "本地文件已就绪 - 点击播放"
+        
+        // 显示全局播放器
+        GlobalPlayerContainer.shared.updateInfo(
+            title: video.title,
+            artist: video.channelTitle,
+            artwork: thumbnailImage,
+            video: video
+        )
     }
     
     private func showAlert(title: String, message: String) {

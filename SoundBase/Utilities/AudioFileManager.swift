@@ -32,10 +32,12 @@ struct DownloadTask {
     var progress: Double
     var status: DownloadTaskStatus
     let sourceURL: URL?
+    let taskIdentifier: String?
 }
 
 enum DownloadTaskStatus {
     case downloading
+    case paused
     case failed(String)
 }
 
@@ -70,10 +72,13 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     private let metadataFileName = "audio_metadata.json"
     private let failedDownloadsFileName = "failed_downloads.json"
     private var urlSession: URLSession!
-    private var activeDownloads: [String: (completion: (Result<DownloadedAudio, Error>) -> Void, startTime: Date, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, destinationURL: URL, sourceURL: URL)] = [:]
+    private var activeDownloads: [String: (completion: (Result<DownloadedAudio, Error>) -> Void, startTime: Date, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, destinationURL: URL, sourceURL: URL, task: URLSessionDownloadTask)] = [:]
     
     // 跟踪正在下载的videoId
     private var downloadingVideoIds: Set<String> = []
+    
+    // 暂停的下载任务 - 保存恢复数据
+    private var pausedDownloads: [String: (resumeData: Data, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, sourceURL: URL)] = [:]
     
     // 失败的下载任务
     private var failedDownloads: [FailedDownload] = []
@@ -115,7 +120,8 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             channelTitle: channelTitle,
             thumbnailURL: thumbnailURL,
             destinationURL: destinationURL,
-            sourceURL: sourceURL
+            sourceURL: sourceURL,
+            task: task
         )
         
         // 标记为下载中
@@ -286,16 +292,132 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     
     // 获取所有正在下载的任务
     func getActiveDownloadTasks() -> [DownloadTask] {
-        return activeDownloads.values.map { downloadInfo in
-            DownloadTask(
+        var tasks: [DownloadTask] = []
+        
+        // 正在下载的任务
+        for (taskId, downloadInfo) in activeDownloads {
+            tasks.append(DownloadTask(
                 videoId: downloadInfo.videoId,
                 title: downloadInfo.title,
                 channelTitle: downloadInfo.channelTitle,
                 thumbnailURL: downloadInfo.thumbnailURL,
-                progress: 0, // 进度会通过通知更新
+                progress: 0,
                 status: .downloading,
+                sourceURL: downloadInfo.sourceURL,
+                taskIdentifier: taskId
+            ))
+        }
+        
+        // 暂停的任务
+        for (videoId, pausedInfo) in pausedDownloads {
+            tasks.append(DownloadTask(
+                videoId: pausedInfo.videoId,
+                title: pausedInfo.title,
+                channelTitle: pausedInfo.channelTitle,
+                thumbnailURL: pausedInfo.thumbnailURL,
+                progress: 0,
+                status: .paused,
+                sourceURL: pausedInfo.sourceURL,
+                taskIdentifier: videoId
+            ))
+        }
+        
+        return tasks
+    }
+    
+    // 暂停下载
+    func pauseDownload(videoId: String) {
+        guard let (taskId, downloadInfo) = activeDownloads.first(where: { $0.value.videoId == videoId }) else {
+            print("⚠️ [下载] 找不到正在下载的任务: \(videoId)")
+            return
+        }
+        
+        let task = downloadInfo.task
+        task.cancel { [weak self] resumeData in
+            guard let self = self, let data = resumeData else {
+                print("❌ [下载] 无法获取恢复数据")
+                return
+            }
+            
+            // 保存暂停信息
+            self.pausedDownloads[videoId] = (
+                resumeData: data,
+                videoId: downloadInfo.videoId,
+                title: downloadInfo.title,
+                channelTitle: downloadInfo.channelTitle,
+                thumbnailURL: downloadInfo.thumbnailURL,
                 sourceURL: downloadInfo.sourceURL
             )
+            
+            // 从活动下载中移除
+            self.activeDownloads.removeValue(forKey: taskId)
+            self.downloadingVideoIds.remove(videoId)
+            
+            print("⏸️ [下载] 已暂停: \(downloadInfo.title)")
+            
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .downloadProgressUpdated,
+                    object: nil,
+                    userInfo: ["videoId": videoId, "status": "paused"]
+                )
+            }
+        }
+    }
+    
+    // 继续下载
+    func resumeDownload(videoId: String, completion: @escaping (Result<DownloadedAudio, Error>) -> Void) {
+        guard let pausedInfo = pausedDownloads[videoId] else {
+            print("⚠️ [下载] 找不到暂停的任务: \(videoId)")
+            return
+        }
+        
+        let fileName = sanitizeFileName(pausedInfo.title) + ".m4a"
+        let destinationURL = documentsDirectory.appendingPathComponent(fileName)
+        
+        let task = urlSession.downloadTask(withResumeData: pausedInfo.resumeData)
+        let taskIdentifier = "\(task.taskIdentifier)"
+        
+        activeDownloads[taskIdentifier] = (
+            completion: completion,
+            startTime: Date(),
+            videoId: pausedInfo.videoId,
+            title: pausedInfo.title,
+            channelTitle: pausedInfo.channelTitle,
+            thumbnailURL: pausedInfo.thumbnailURL,
+            destinationURL: destinationURL,
+            sourceURL: pausedInfo.sourceURL,
+            task: task
+        )
+        
+        downloadingVideoIds.insert(videoId)
+        pausedDownloads.removeValue(forKey: videoId)
+        
+        task.resume()
+        print("▶️ [下载] 已继续: \(pausedInfo.title)")
+        
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .downloadProgressUpdated,
+                object: nil,
+                userInfo: ["videoId": videoId, "status": "resumed"]
+            )
+        }
+    }
+    
+    // 取消下载
+    func cancelDownload(videoId: String) {
+        // 从活动下载中取消
+        if let (taskId, downloadInfo) = activeDownloads.first(where: { $0.value.videoId == videoId }) {
+            downloadInfo.task.cancel()
+            activeDownloads.removeValue(forKey: taskId)
+            downloadingVideoIds.remove(videoId)
+            print("❌ [下载] 已取消: \(downloadInfo.title)")
+        }
+        
+        // 从暂停列表中移除
+        if pausedDownloads.removeValue(forKey: videoId) != nil {
+            print("❌ [下载] 已从暂停列表移除: \(videoId)")
         }
     }
     
@@ -319,6 +441,26 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     // 移除失败的下载任务
     func removeFailedDownload(_ failedDownload: FailedDownload) {
         removeFromFailedDownloads(videoId: failedDownload.videoId)
+    }
+    
+    // 一键清理失败的下载
+    func clearAllFailedDownloads() {
+        failedDownloads.removeAll()
+        saveFailedDownloads()
+        print("🧹 [清理] 已清理所有失败的下载")
+    }
+    
+    // 一键清理已完成的下载
+    func clearAllCompletedDownloads() throws {
+        let audios = getAllDownloadedAudios()
+        for audio in audios {
+            try? FileManager.default.removeItem(at: audio.fileURL)
+        }
+        
+        let metadataURL = documentsDirectory.appendingPathComponent(metadataFileName)
+        try? FileManager.default.removeItem(at: metadataURL)
+        
+        print("🧹 [清理] 已清理所有已完成的下载")
     }
     
     // MARK: - Private Methods

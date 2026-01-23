@@ -7,6 +7,7 @@
 
 import UIKit
 import SnapKit
+import YouTubeKit
 
 struct VideoSearchResult {
     let videoId: String
@@ -179,9 +180,144 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         let video = searchResults[indexPath.row]
-        let playerVC = AudioPlayerViewController(video: video)
-        playerVC.hidesBottomBarWhenPushed = true
-        navigationController?.pushViewController(playerVC, animated: true)
+        showActionSheet(for: video)
+    }
+    
+    private func showActionSheet(for video: VideoSearchResult) {
+        let alert = UIAlertController(title: video.title, message: "请选择操作", preferredStyle: .actionSheet)
+        
+        alert.addAction(UIAlertAction(title: "播放", style: .default) { [weak self] _ in
+            self?.playAudio(video: video)
+        })
+        
+        alert.addAction(UIAlertAction(title: "下载", style: .default) { [weak self] _ in
+            self?.downloadAudio(video: video)
+        })
+        
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        
+        if let popoverController = alert.popoverPresentationController {
+            popoverController.sourceView = self.view
+            popoverController.sourceRect = CGRect(x: self.view.bounds.midX, y: self.view.bounds.midY, width: 0, height: 0)
+            popoverController.permittedArrowDirections = []
+        }
+        
+        present(alert, animated: true)
+    }
+    
+    private func playAudio(video: VideoSearchResult) {
+        let loadingAlert = UIAlertController(title: "正在解析音频...", message: nil, preferredStyle: .alert)
+        present(loadingAlert, animated: true)
+        
+        Task {
+            do {
+                let audioURL = try await extractAudioURL(for: video)
+                
+                await MainActor.run {
+                    loadingAlert.dismiss(animated: true) {
+                        self.startPlaying(video: video, audioURL: audioURL)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    loadingAlert.dismiss(animated: true) {
+                        self.showAlert(title: "解析失败", message: error.localizedDescription)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func downloadAudio(video: VideoSearchResult) {
+        let loadingAlert = UIAlertController(title: "正在解析音频...", message: nil, preferredStyle: .alert)
+        present(loadingAlert, animated: true)
+        
+        Task {
+            do {
+                let audioURL = try await extractAudioURL(for: video)
+                
+                await MainActor.run {
+                    loadingAlert.dismiss(animated: true) {
+                        self.startDownload(video: video, audioURL: audioURL)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    loadingAlert.dismiss(animated: true) {
+                        self.showAlert(title: "解析失败", message: error.localizedDescription)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func extractAudioURL(for video: VideoSearchResult) async throws -> URL {
+        let youtube = YouTube(videoID: video.videoId)
+        let streams = try await youtube.streams
+        
+        // 优先选择可原生播放的音频流
+        let nativePlayableAudioStreams = streams
+            .filterAudioOnly()
+            .filter { $0.isNativelyPlayable }
+        
+        if let stream = nativePlayableAudioStreams.highestAudioBitrateStream() {
+            return stream.url
+        } else if let stream = streams.filterAudioOnly().highestAudioBitrateStream() {
+            return stream.url
+        } else {
+            throw NSError(domain: "AudioExtraction", code: -1, userInfo: [NSLocalizedDescriptionKey: "未找到音频流"])
+        }
+    }
+    
+    private func startPlaying(video: VideoSearchResult, audioURL: URL) {
+        // 准备播放器
+        var thumbnailImage: UIImage?
+        if let thumbnailURL = video.thumbnailURL,
+           let imageData = try? Data(contentsOf: thumbnailURL) {
+            thumbnailImage = UIImage(data: imageData)
+        }
+        
+        MediaPlayerManager.shared.prepare(
+            url: audioURL,
+            title: video.title,
+            artist: video.channelTitle,
+            artwork: thumbnailImage
+        )
+        
+        // 延迟播放以确保播放器准备就绪
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            MediaPlayerManager.shared.play()
+            
+            // 显示全局播放器
+            GlobalPlayerContainer.shared.show(
+                title: video.title,
+                artist: video.channelTitle,
+                artwork: thumbnailImage,
+                video: video
+            )
+        }
+        
+        showAlert(title: "开始播放", message: video.title)
+    }
+    
+    private func startDownload(video: VideoSearchResult, audioURL: URL) {
+        // 开始下载
+        AudioFileManager.shared.saveAudio(
+            videoId: video.videoId,
+            title: video.title,
+            channelTitle: video.channelTitle,
+            thumbnailURL: video.thumbnailURL,
+            sourceURL: audioURL
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    self?.showAlert(title: "开始下载", message: "下载将在后台进行\n可以在下载管理中查看进度")
+                case .failure(let error):
+                    self?.showAlert(title: "下载失败", message: error.localizedDescription)
+                }
+            }
+        }
     }
 }
 

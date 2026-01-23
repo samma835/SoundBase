@@ -26,15 +26,26 @@ class GlobalPlayerContainer {
         // 创建 mini player
         let miniPlayer = MiniPlayerView()
         miniPlayer.isHidden = true
+        miniPlayer.alpha = 0
         miniPlayer.onTap = { [weak self] in
             self?.showPlayerDetail()
         }
         
         viewController.view.addSubview(miniPlayer)
-        miniPlayer.snp.makeConstraints { make in
-            make.left.right.equalToSuperview()
-            make.bottom.equalTo(viewController.view.safeAreaLayoutGuide.snp.bottom)
-            make.height.equalTo(miniPlayerHeight)
+        
+        // 约束到 TabBar 上方，避免遮挡 TabBar
+        if let tabBarController = viewController as? UITabBarController {
+            miniPlayer.snp.makeConstraints { make in
+                make.left.right.equalToSuperview()
+                make.bottom.equalTo(tabBarController.tabBar.snp.top)
+                make.height.equalTo(miniPlayerHeight)
+            }
+        } else {
+            miniPlayer.snp.makeConstraints { make in
+                make.left.right.equalToSuperview()
+                make.bottom.equalTo(viewController.view.safeAreaLayoutGuide.snp.bottom)
+                make.height.equalTo(miniPlayerHeight)
+            }
         }
         
         miniPlayerView = miniPlayer
@@ -57,25 +68,16 @@ class GlobalPlayerContainer {
         
         guard miniPlayerView?.isHidden == true else { return }
         
+        miniPlayerView?.isHidden = false
+        
         UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
-            self.miniPlayerView?.isHidden = false
             self.miniPlayerView?.alpha = 1
-            
-            // 调整 tab bar controller 的内容区域
-            if let tabBarController = self.containerViewController as? UITabBarController {
-                tabBarController.additionalSafeAreaInsets.bottom = self.miniPlayerHeight
-            }
         }
     }
     
     func hide() {
         UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseIn) {
             self.miniPlayerView?.alpha = 0
-            
-            // 恢复 tab bar controller 的内容区域
-            if let tabBarController = self.containerViewController as? UITabBarController {
-                tabBarController.additionalSafeAreaInsets.bottom = 0
-            }
         } completion: { _ in
             self.miniPlayerView?.isHidden = true
         }

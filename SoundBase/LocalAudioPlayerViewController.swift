@@ -193,8 +193,8 @@ class LocalAudioPlayerViewController: UIViewController {
     }
     
     private func setupPlayer() {
-        // 使用全局播放器管理器
-        playerManager.play(
+        // 使用全局播放器管理器，只准备不自动播放
+        playerManager.prepare(
             url: audio.fileURL,
             title: audio.title,
             artist: audio.channelTitle,

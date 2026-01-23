@@ -170,6 +170,16 @@ class AudioPlayerViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         checkDownloadStatus()
+        updatePlayButtonState()
+    }
+    
+    // 更新播放按钮状态
+    private func updatePlayButtonState() {
+        if isPlayingCurrentAudio(), let player = player, player.timeControlStatus == .playing {
+            updatePlayButton(isPlaying: true)
+        } else {
+            updatePlayButton(isPlaying: false)
+        }
     }
     
     private func setupAudioSession() {
@@ -444,9 +454,10 @@ class AudioPlayerViewController: UIViewController {
                 await MainActor.run {
                     self.audioURL = selectedStream.url
                     if selectedStream.isNativelyPlayable {
-                        self.statusLabel.text = "音频已就绪 - 可播放/下载"
+                        self.statusLabel.text = "音频已就绪 - 点击播放"
                         self.playButton.isEnabled = true
-                        self.setupPlayer()
+                        // 不自动设置播放器，避免打断正在播放的音频
+                        // self.setupPlayer()
                     } else {
                         self.statusLabel.text = "音频格式不支持直播 - 请下载后播放"
                         self.playButton.isEnabled = false
@@ -594,6 +605,19 @@ class AudioPlayerViewController: UIViewController {
     }
     
     @objc private func playButtonTapped() {
+        // 如果player为nil或者当前播放的不是这个音频，则先设置player
+        if player == nil || !isPlayingCurrentAudio() {
+            setupPlayer()
+            // 等待player准备好
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.player?.play()
+                self?.updatePlayButton(isPlaying: true)
+                self?.updateNowPlayingInfo()
+                print("Playing")
+            }
+            return
+        }
+        
         guard let player = player else {
             print("Player is nil")
             return
@@ -610,6 +634,17 @@ class AudioPlayerViewController: UIViewController {
         }
         
         updateNowPlayingInfo()
+    }
+    
+    // 检查当前播放的是否是这个视频的音频
+    private func isPlayingCurrentAudio() -> Bool {
+        guard let player = player,
+              let currentItem = player.currentItem,
+              let currentURL = (currentItem.asset as? AVURLAsset)?.url,
+              let myAudioURL = audioURL else {
+            return false
+        }
+        return currentURL == myAudioURL
     }
     
     private func updatePlayButton(isPlaying: Bool) {
@@ -821,11 +856,11 @@ class AudioPlayerViewController: UIViewController {
         
         NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
         
-        // 自动开始播放
-        player?.play()
-        updatePlayButton(isPlaying: true)
+        // 不自动开始播放，等待用户手动点击
+        // player?.play()
+        updatePlayButton(isPlaying: false)
         playButton.isEnabled = true
-        statusLabel.text = "正在播放本地文件"
+        statusLabel.text = "本地文件已就绪 - 点击播放"
         
         // 更新控制中心信息
         updateNowPlayingInfo()

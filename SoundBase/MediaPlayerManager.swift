@@ -95,6 +95,66 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         postPlaybackStateChanged(isPlaying: true)
     }
     
+    /// 准备播放器但不自动播放
+    func prepare(url: URL, title: String? = nil, artist: String? = nil, artwork: UIImage? = nil) {
+        print("🎵 [播放器管理] 准备: \(title ?? url.lastPathComponent)")
+        
+        // 如果已有player且URL相同，不做任何操作
+        if let currentItem = player?.currentItem,
+           let currentURL = (currentItem.asset as? AVURLAsset)?.url,
+           currentURL == url {
+            print("🎵 [播放器管理] 已准备相同音频")
+            return
+        }
+        
+        // 清理旧的观察者
+        cleanupCurrentItem()
+        
+        // 创建新的player
+        let playerItem = AVPlayerItem(url: url)
+        currentPlayerItem = playerItem
+        
+        if player == nil {
+            player = AVPlayer(playerItem: playerItem)
+        } else {
+            player?.replaceCurrentItem(with: playerItem)
+        }
+        
+        // 保存播放信息
+        currentTitle = title
+        currentArtist = artist
+        currentArtwork = artwork
+        
+        // 添加状态观察
+        playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
+        
+        // 监听播放进度
+        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
+        timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
+            guard let self = self,
+                  let duration = self.player?.currentItem?.duration else { return }
+            NotificationCenter.default.post(
+                name: MediaPlayerManager.timeUpdateNotification,
+                object: nil,
+                userInfo: ["currentTime": time, "duration": duration]
+            )
+        }
+        
+        // 监听播放结束
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playerDidFinishPlaying),
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem
+        )
+        
+        // 更新锁屏信息
+        updateNowPlayingInfo()
+        
+        // 不自动播放
+        print("🎵 [播放器管理] 准备完成，等待用户播放")
+    }
+    
     func play() {
         player?.play()
         postPlaybackStateChanged(isPlaying: true)

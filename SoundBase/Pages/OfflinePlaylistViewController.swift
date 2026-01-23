@@ -105,7 +105,16 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         let audio = downloadedAudios[indexPath.row]
-        let playerVC = LocalAudioPlayerViewController(audio: audio)
+        
+        // 从 DownloadedAudio 构造 VideoSearchResult
+        let videoResult = VideoSearchResult(
+            videoId: audio.videoId,
+            title: audio.title,
+            channelTitle: audio.channelTitle,
+            thumbnailURL: audio.thumbnailURL
+        )
+        
+        let playerVC = AudioPlayerViewController(video: videoResult)
         playerVC.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(playerVC, animated: true)
     }

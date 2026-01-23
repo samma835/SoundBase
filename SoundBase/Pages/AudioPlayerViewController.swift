@@ -13,23 +13,11 @@ import MediaPlayer
 
 class AudioPlayerViewController: UIViewController {
     
-    // 使用静态变量保存播放器实例，使其在视图销毁后继续存在
-    private static var sharedPlayer: AVPlayer?
-    private static var sharedTimeObserver: Any?
-    
     private let video: VideoSearchResult
+    private let playerManager = MediaPlayerManager.shared
     private var audioURL: URL?
-    private var player: AVPlayer? {
-        get { Self.sharedPlayer }
-        set { Self.sharedPlayer = newValue }
-    }
-    private var timeObserver: Any? {
-        get { Self.sharedTimeObserver }
-        set { Self.sharedTimeObserver = newValue }
-    }
     private var downloadedFileURL: URL?
     private var isDownloading = false
-    private var lastLoggedDuration: Double = 0
     private var thumbnailImage: UIImage?
     
     private lazy var thumbnailImageView: UIImageView = {
@@ -159,8 +147,6 @@ class AudioPlayerViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
-        setupAudioSession()
-        setupRemoteCommandCenter()
         loadVideoInfo()
         checkDownloadStatus()
         setupNotifications()
@@ -175,136 +161,16 @@ class AudioPlayerViewController: UIViewController {
     
     // 更新播放按钮状态
     private func updatePlayButtonState() {
-        if isPlayingCurrentAudio(), let player = player, player.timeControlStatus == .playing {
-            updatePlayButton(isPlaying: true)
-        } else {
-            updatePlayButton(isPlaying: false)
-        }
-    }
-    
-    private func setupAudioSession() {
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            // 设置为播放类别，支持后台播放
-            try audioSession.setCategory(.playback, mode: .default, options: [])
-            try audioSession.setActive(true)
-            print("✅ [Audio Session] 已配置后台播放支持")
-        } catch {
-            print("❌ [Audio Session] 配置失败: \(error.localizedDescription)")
-        }
-    }
-    
-    private func setupRemoteCommandCenter() {
-        let commandCenter = MPRemoteCommandCenter.shared()
-        
-        // 播放命令
-        commandCenter.playCommand.isEnabled = true
-        commandCenter.playCommand.addTarget { [weak self] _ in
-            self?.player?.play()
-            self?.updatePlayButton(isPlaying: true)
-            return .success
-        }
-        
-        // 暂停命令
-        commandCenter.pauseCommand.isEnabled = true
-        commandCenter.pauseCommand.addTarget { [weak self] _ in
-            self?.player?.pause()
-            self?.updatePlayButton(isPlaying: false)
-            return .success
-        }
-        
-        // 下一曲（可选，暂时禁用）
-        commandCenter.nextTrackCommand.isEnabled = false
-        
-        // 上一曲（可选，暂时禁用）
-        commandCenter.previousTrackCommand.isEnabled = false
-        
-        // 进度调整
-        commandCenter.changePlaybackPositionCommand.isEnabled = true
-        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
-            guard let self = self,
-                  let event = event as? MPChangePlaybackPositionCommandEvent else {
-                return .commandFailed
-            }
-            
-            let time = CMTime(seconds: event.positionTime, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-            self.player?.seek(to: time)
-            return .success
-        }
-        
-        print("✅ [Remote Command] 已配置控制中心")
-    }
-    
-    private func updateNowPlayingInfo() {
-        guard let player = player,
-              let currentItem = player.currentItem else {
-            return
-        }
-        
-        var nowPlayingInfo = [String: Any]()
-        nowPlayingInfo[MPMediaItemPropertyTitle] = video.title
-        nowPlayingInfo[MPMediaItemPropertyArtist] = video.channelTitle
-        
-        // 设置时长
-        let duration = getDuration(from: currentItem)
-        if duration > 0 {
-            nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
-        }
-        
-        // 设置当前播放时间
-        let currentTime = CMTimeGetSeconds(player.currentTime())
-        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        
-        // 设置播放速率
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player.rate
-        
-        // 设置封面图
-        if let thumbnailImage = thumbnailImage {
-            let artwork = MPMediaItemArtwork(boundsSize: thumbnailImage.size) { _ in
-                return thumbnailImage
-            }
-            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-        }
-        
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-    }
-    
-    private func getDuration(from item: AVPlayerItem) -> Double {
-        // 使用和 updateProgress 相同的逻辑获取 duration
-        var duration: Double = 0
-        
-        if let seekable = item.seekableTimeRanges.last as? CMTimeRange {
-            duration = CMTimeGetSeconds(seekable.end)
-            if duration > 0 && !duration.isNaN && !duration.isInfinite {
-                return duration
-            }
-        }
-        
-        if let asset = item.asset as? AVURLAsset,
-           let audioTrack = asset.tracks(withMediaType: .audio).first {
-            duration = CMTimeGetSeconds(audioTrack.timeRange.duration)
-            if duration > 0 && !duration.isNaN && !duration.isInfinite {
-                return duration
-            }
-        }
-        
-        let rawDuration = CMTimeGetSeconds(item.duration)
-        if rawDuration > 0 && !rawDuration.isNaN && !rawDuration.isInfinite {
-            return rawDuration / 2.0
-        }
-        
-        return 0
+        let isPlaying = playerManager.isPlaying()
+        updatePlayButton(isPlaying: isPlaying)
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         // 不要暂停播放，支持后台继续播放
-        // player?.pause()
     }
     
     deinit {
-        // 注意：不移除timeObserver和KVO观察者，因为player是静态变量
-        // 这些观察者需要在整个应用生命周期内保持，以便后台播放正常工作
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -419,7 +285,23 @@ class AudioPlayerViewController: UIViewController {
     }
     
     private func extractAudio() {
+        // 先检查是否有本地文件
+        if let downloadedAudio = AudioFileManager.shared.isDownloaded(videoId: video.videoId) {
+            print("📱 [本地播放] 找到本地文件: \(downloadedAudio.title)")
+            statusLabel.text = "播放本地音频"
+            audioURL = downloadedAudio.fileURL
+            downloadedFileURL = downloadedAudio.fileURL
+            playButton.isEnabled = true
+            downloadButton.isEnabled = false
+            downloadButton.setTitle("  已下载", for: .normal)
+            downloadButton.backgroundColor = .systemGreen.withAlphaComponent(0.2)
+            downloadButton.tintColor = .systemGreen
+            return
+        }
+        
+        // 没有本地文件，继续YouTube提取流程
         activityIndicator.startAnimating()
+        statusLabel.text = "正在解析音频..."
         
         Task {
             do {
@@ -456,8 +338,6 @@ class AudioPlayerViewController: UIViewController {
                     if selectedStream.isNativelyPlayable {
                         self.statusLabel.text = "音频已就绪 - 点击播放"
                         self.playButton.isEnabled = true
-                        // 不自动设置播放器，避免打断正在播放的音频
-                        // self.setupPlayer()
                     } else {
                         self.statusLabel.text = "音频格式不支持直播 - 请下载后播放"
                         self.playButton.isEnabled = false
@@ -479,111 +359,27 @@ class AudioPlayerViewController: UIViewController {
     private func setupPlayer() {
         guard let audioURL = audioURL else { return }
         
-        print("Setting up player with URL: \(audioURL)")
+        print("🎵 [播放器] 准备音频: \(video.title)")
         
-        // 清理旧的观察者
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-            timeObserver = nil
-        }
-        player?.currentItem?.removeObserver(self, forKeyPath: "status")
-        player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
-        player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
+        // 使用 MediaPlayerManager 准备播放器
+        playerManager.prepare(
+            url: audioURL,
+            title: video.title,
+            artist: video.channelTitle,
+            artwork: thumbnailImage
+        )
         
-        // 创建 AVAsset 并设置 HTTP headers
-        let headers = [
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9"
-        ]
-        
-        let asset = AVURLAsset(url: audioURL, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
-        let playerItem = AVPlayerItem(asset: asset)
-        
-        player = AVPlayer(playerItem: playerItem)
-        
-        // 检查播放器状态
-        playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
-        
-        // 监听缓冲状态
-        playerItem.addObserver(self, forKeyPath: "playbackBufferEmpty", options: .new, context: nil)
-        playerItem.addObserver(self, forKeyPath: "playbackLikelyToKeepUp", options: .new, context: nil)
-        
-        // 使用1秒间隔更新进度，避免时长计算错误
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
-            self?.updateProgress()
-        }
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
+        statusLabel.text = "音频已就绪 - 点击播放"
     }
     
-    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        if keyPath == "status" {
-            if let statusNumber = change?[.newKey] as? NSNumber {
-                let status = AVPlayerItem.Status(rawValue: statusNumber.intValue)
-                switch status {
-                case .readyToPlay:
-                    print("Player ready to play")
-                    DispatchQueue.main.async {
-                        self.statusLabel.text = "音频已就绪 - 点击播放"
-                    }
-                case .failed:
-                    let error = player?.currentItem?.error
-                    print("Player failed: \(error?.localizedDescription ?? "unknown error")")
-                    if let nsError = error as NSError? {
-                        print("Error domain: \(nsError.domain)")
-                        print("Error code: \(nsError.code)")
-                        print("Error userInfo: \(nsError.userInfo)")
-                    }
-                    DispatchQueue.main.async {
-                        self.statusLabel.text = "播放器错误，请尝试下载"
-                        self.showAlert(title: "播放失败", message: "音频流可能需要下载后播放")
-                    }
-                case .unknown:
-                    print("Player status unknown")
-                default:
-                    break
-                }
-            }
-        } else if keyPath == "playbackBufferEmpty" {
-            print("Buffer empty")
-        } else if keyPath == "playbackLikelyToKeepUp" {
-            print("Buffer ready to keep up")
-        }
-    }
-    
-    private func updateProgress() {
-        guard let player = player,
-              let currentItem = player.currentItem else { return }
+    private func updateProgress(currentTime: CMTime, duration: CMTime) {
+        let current = CMTimeGetSeconds(currentTime)
+        let total = CMTimeGetSeconds(duration)
         
-        let currentTime = CMTimeGetSeconds(player.currentTime())
-        
-        // 修复 duration 翻倍问题 - 按优先级尝试不同方法
-        let duration = getDuration(from: currentItem)
-        
-        // 更新UI
-        if duration > 0 && !duration.isNaN && !duration.isInfinite {
-            progressSlider.value = Float(currentTime / duration)
-            currentTimeLabel.text = formatTime(currentTime)
-            durationLabel.text = formatTime(duration)
-            
-            // 日志输出（仅在变化时）
-            if abs(lastLoggedDuration - duration) > 1 {
-                if let seekable = currentItem.seekableTimeRanges.last as? CMTimeRange,
-                   CMTimeGetSeconds(seekable.end) == duration {
-                    print("✅ [Duration] 使用 seekableTimeRanges: \(duration) 秒 (\(formatTime(duration)))")
-                } else if let asset = currentItem.asset as? AVURLAsset,
-                          let audioTrack = asset.tracks(withMediaType: .audio).first,
-                          CMTimeGetSeconds(audioTrack.timeRange.duration) == duration {
-                    print("✅ [Duration] 使用 audioTrack: \(duration) 秒 (\(formatTime(duration)))")
-                } else {
-                    print("⚠️ [Duration] 使用 duration/2 workaround: \(duration) 秒 (\(formatTime(duration)))")
-                }
-                lastLoggedDuration = duration
-            }
-            
-            // 更新控制中心信息
-            updateNowPlayingInfo()
+        if !total.isNaN && !total.isInfinite && total > 0 {
+            progressSlider.value = Float(current / total)
+            currentTimeLabel.text = formatTime(current)
+            durationLabel.text = formatTime(total)
         }
     }
     
@@ -599,46 +395,27 @@ class AudioPlayerViewController: UIViewController {
             DispatchQueue.main.async {
                 self?.thumbnailImageView.image = image
                 self?.thumbnailImage = image
-                self?.updateNowPlayingInfo() // 更新控制中心封面
             }
         }.resume()
     }
     
     @objc private func playButtonTapped() {
-        // 如果player为nil或者当前播放的不是这个音频，则先设置player
-        if player == nil || !isPlayingCurrentAudio() {
+        // 如果没有准备好播放器，先设置
+        if audioURL != nil && !isPlayingCurrentAudio() {
             setupPlayer()
-            // 等待player准备好
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.player?.play()
-                self?.updatePlayButton(isPlaying: true)
-                self?.updateNowPlayingInfo()
-                print("Playing")
+            // 等待一小段时间让播放器准备好
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.playerManager.play()
             }
-            return
-        }
-        
-        guard let player = player else {
-            print("Player is nil")
-            return
-        }
-        
-        if player.timeControlStatus == .playing {
-            player.pause()
-            updatePlayButton(isPlaying: false)
-            print("Paused")
         } else {
-            player.play()
-            updatePlayButton(isPlaying: true)
-            print("Playing")
+            // 切换播放/暂停
+            playerManager.togglePlayPause()
         }
-        
-        updateNowPlayingInfo()
     }
     
     // 检查当前播放的是否是这个视频的音频
     private func isPlayingCurrentAudio() -> Bool {
-        guard let player = player,
+        guard let player = playerManager.player,
               let currentItem = player.currentItem,
               let currentURL = (currentItem.asset as? AVURLAsset)?.url,
               let myAudioURL = audioURL else {
@@ -659,21 +436,42 @@ class AudioPlayerViewController: UIViewController {
     }
     
     @objc private func sliderValueChanged() {
-        guard let player = player,
-              let duration = player.currentItem?.duration else { return }
-        
-        let seconds = Double(progressSlider.value) * CMTimeGetSeconds(duration)
+        let duration = CMTimeGetSeconds(playerManager.duration())
+        let seconds = Double(progressSlider.value) * duration
         let time = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        player.seek(to: time)
+        playerManager.seek(to: time)
     }
     
     @objc private func playerDidFinishPlaying() {
         updatePlayButton(isPlaying: false)
-        player?.seek(to: .zero)
-        updateNowPlayingInfo()
+        playerManager.seek(to: .zero)
     }
     
     private func setupNotifications() {
+        // 监听播放状态变化
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playbackStateChanged(_:)),
+            name: MediaPlayerManager.playbackStateChangedNotification,
+            object: nil
+        )
+        
+        // 监听时间更新
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(timeUpdated(_:)),
+            name: MediaPlayerManager.timeUpdateNotification,
+            object: nil
+        )
+        
+        // 监听播放结束
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(playbackFinished),
+            name: MediaPlayerManager.playbackFinishedNotification,
+            object: nil
+        )
+        
         // 监听下载进度
         NotificationCenter.default.addObserver(
             self,
@@ -697,6 +495,24 @@ class AudioPlayerViewController: UIViewController {
             name: .downloadFailed,
             object: nil
         )
+    }
+    
+    @objc private func playbackStateChanged(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let isPlaying = userInfo["isPlaying"] as? Bool else { return }
+        updatePlayButton(isPlaying: isPlaying)
+    }
+    
+    @objc private func timeUpdated(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let currentTime = userInfo["currentTime"] as? CMTime,
+              let duration = userInfo["duration"] as? CMTime else { return }
+        updateProgress(currentTime: currentTime, duration: duration)
+    }
+    
+    @objc private func playbackFinished() {
+        updatePlayButton(isPlaying: false)
+        playerManager.seek(to: .zero)
     }
     
     private func checkDownloadStatus() {
@@ -832,38 +648,18 @@ class AudioPlayerViewController: UIViewController {
     @objc private func playLocalButtonTapped() {
         guard let fileURL = downloadedFileURL else { return }
         
-        print("Playing local file: \(fileURL.path)")
+        print("📱 [本地播放] 播放本地文件: \(fileURL.path)")
         
-        // 停止当前播放器
-        player?.pause()
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-            timeObserver = nil
-        }
-        player?.currentItem?.removeObserver(self, forKeyPath: "status")
-        player?.currentItem?.removeObserver(self, forKeyPath: "playbackBufferEmpty")
-        player?.currentItem?.removeObserver(self, forKeyPath: "playbackLikelyToKeepUp")
+        // 使用 MediaPlayerManager 准备播放器
+        playerManager.prepare(
+            url: fileURL,
+            title: video.title,
+            artist: video.channelTitle,
+            artwork: thumbnailImage
+        )
         
-        // 创建本地文件播放器
-        let playerItem = AVPlayerItem(url: fileURL)
-        player = AVPlayer(playerItem: playerItem)
-        
-        playerItem.addObserver(self, forKeyPath: "status", options: [.new, .initial], context: nil)
-        
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1.0, preferredTimescale: CMTimeScale(NSEC_PER_SEC)), queue: .main) { [weak self] time in
-            self?.updateProgress()
-        }
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(playerDidFinishPlaying), name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
-        
-        // 不自动开始播放，等待用户手动点击
-        // player?.play()
-        updatePlayButton(isPlaying: false)
         playButton.isEnabled = true
         statusLabel.text = "本地文件已就绪 - 点击播放"
-        
-        // 更新控制中心信息
-        updateNowPlayingInfo()
     }
     
     private func showAlert(title: String, message: String) {

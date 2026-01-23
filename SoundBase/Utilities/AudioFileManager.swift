@@ -23,6 +23,32 @@ struct DownloadedAudio: Codable {
     }
 }
 
+// 下载任务模型
+struct DownloadTask {
+    let videoId: String
+    let title: String
+    let channelTitle: String
+    let thumbnailURL: URL?
+    var progress: Double
+    var status: DownloadTaskStatus
+    let sourceURL: URL?
+}
+
+enum DownloadTaskStatus {
+    case downloading
+    case failed(String)
+}
+
+// 失败的下载任务
+struct FailedDownload: Codable {
+    let videoId: String
+    let title: String
+    let channelTitle: String
+    let thumbnailURL: URL?
+    let failureDate: Date
+    let errorMessage: String
+}
+
 // 下载任务状态
 enum DownloadStatus {
     case downloading(progress: Double)
@@ -42,11 +68,15 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     
     private let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     private let metadataFileName = "audio_metadata.json"
+    private let failedDownloadsFileName = "failed_downloads.json"
     private var urlSession: URLSession!
-    private var activeDownloads: [String: (completion: (Result<DownloadedAudio, Error>) -> Void, startTime: Date, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, destinationURL: URL)] = [:]
+    private var activeDownloads: [String: (completion: (Result<DownloadedAudio, Error>) -> Void, startTime: Date, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, destinationURL: URL, sourceURL: URL)] = [:]
     
     // 跟踪正在下载的videoId
     private var downloadingVideoIds: Set<String> = []
+    
+    // 失败的下载任务
+    private var failedDownloads: [FailedDownload] = []
     
     override private init() {
         super.init()
@@ -60,6 +90,9 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         
         print("📁 [文件管理] 文档目录: \(documentsDirectory.path)")
         print("📁 [文件管理] 元数据文件: \(documentsDirectory.appendingPathComponent(metadataFileName).path)")
+        
+        // 加载失败的下载任务
+        loadFailedDownloads()
     }
     
     // 保存音频文件和元数据（后台下载）
@@ -81,11 +114,15 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             title: title,
             channelTitle: channelTitle,
             thumbnailURL: thumbnailURL,
-            destinationURL: destinationURL
+            destinationURL: destinationURL,
+            sourceURL: sourceURL
         )
         
         // 标记为下载中
         downloadingVideoIds.insert(videoId)
+        
+        // 如果之前失败过，从失败列表中移除
+        removeFromFailedDownloads(videoId: videoId)
         
         task.resume()
         print("📥 [下载] 下载任务已启动 (ID: \(taskIdentifier))")
@@ -191,6 +228,17 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             print("❌ [下载] 任务完成时出错: \(error.localizedDescription)")
             
             if let downloadInfo = activeDownloads[taskIdentifier] {
+                // 保存失败的下载任务
+                let failedDownload = FailedDownload(
+                    videoId: downloadInfo.videoId,
+                    title: downloadInfo.title,
+                    channelTitle: downloadInfo.channelTitle,
+                    thumbnailURL: downloadInfo.thumbnailURL,
+                    failureDate: Date(),
+                    errorMessage: error.localizedDescription
+                )
+                saveFailedDownload(failedDownload)
+                
                 DispatchQueue.main.async {
                     NotificationCenter.default.post(name: .downloadFailed, object: error)
                     downloadInfo.completion(.failure(error))
@@ -234,6 +282,43 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     // 检查是否正在下载
     func isDownloading(videoId: String) -> Bool {
         return downloadingVideoIds.contains(videoId)
+    }
+    
+    // 获取所有正在下载的任务
+    func getActiveDownloadTasks() -> [DownloadTask] {
+        return activeDownloads.values.map { downloadInfo in
+            DownloadTask(
+                videoId: downloadInfo.videoId,
+                title: downloadInfo.title,
+                channelTitle: downloadInfo.channelTitle,
+                thumbnailURL: downloadInfo.thumbnailURL,
+                progress: 0, // 进度会通过通知更新
+                status: .downloading,
+                sourceURL: downloadInfo.sourceURL
+            )
+        }
+    }
+    
+    // 获取所有失败的下载任务
+    func getFailedDownloads() -> [FailedDownload] {
+        return failedDownloads
+    }
+    
+    // 重试下载
+    func retryDownload(_ failedDownload: FailedDownload, sourceURL: URL, completion: @escaping (Result<DownloadedAudio, Error>) -> Void) {
+        saveAudio(
+            videoId: failedDownload.videoId,
+            title: failedDownload.title,
+            channelTitle: failedDownload.channelTitle,
+            thumbnailURL: failedDownload.thumbnailURL,
+            sourceURL: sourceURL,
+            completion: completion
+        )
+    }
+    
+    // 移除失败的下载任务
+    func removeFailedDownload(_ failedDownload: FailedDownload) {
+        removeFromFailedDownloads(videoId: failedDownload.videoId)
     }
     
     // MARK: - Private Methods
@@ -348,6 +433,52 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             print("💾 [持久化] 已删除音频元数据: \(videoId)")
         } catch {
             print("❌ [持久化] 删除元数据失败: \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - Failed Downloads Management
+    
+    private func saveFailedDownload(_ failedDownload: FailedDownload) {
+        failedDownloads.removeAll { $0.videoId == failedDownload.videoId }
+        failedDownloads.append(failedDownload)
+        saveFailedDownloads()
+    }
+    
+    private func removeFromFailedDownloads(videoId: String) {
+        failedDownloads.removeAll { $0.videoId == videoId }
+        saveFailedDownloads()
+    }
+    
+    private func saveFailedDownloads() {
+        let fileURL = documentsDirectory.appendingPathComponent(failedDownloadsFileName)
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(failedDownloads)
+            try data.write(to: fileURL, options: .atomic)
+            print("💾 [持久化] 失败任务已保存: \(failedDownloads.count) 个")
+        } catch {
+            print("❌ [持久化] 保存失败任务出错: \(error.localizedDescription)")
+        }
+    }
+    
+    private func loadFailedDownloads() {
+        let fileURL = documentsDirectory.appendingPathComponent(failedDownloadsFileName)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print("💾 [持久化] 失败任务文件不存在")
+            return
+        }
+        
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            failedDownloads = try decoder.decode([FailedDownload].self, from: data)
+            print("💾 [持久化] 成功加载 \(failedDownloads.count) 个失败任务")
+        } catch {
+            print("❌ [持久化] 加载失败任务出错: \(error.localizedDescription)")
+            failedDownloads = []
         }
     }
 }

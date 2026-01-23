@@ -22,9 +22,11 @@
 		24E74FDF2F21FEB40057F944 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */; };
 		3E98CD8A958D484BA042F51F /* MediaPlayerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A092146B6FC47719426BEA3 /* MediaPlayerManager.swift */; };
 		C5AE55C8858A2E1E01EFC947 /* Pods_SoundBase.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */; };
+		EFA4741B58ADBD0FB154BFCF /* DownloadManagerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3D721394FB81CB13DCF086 /* DownloadManagerViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		24095E262F2371F500DCD76A /* plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = plan.md; sourceTree = "<group>"; };
 		24E74FA62F21E8240057F944 /* SoundBase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SoundBase.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		24E74FBE2F21E82B0057F944 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		24E74FBF2F21E82B0057F944 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -41,6 +43,7 @@
 		24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
 		39AC2835E3502EFD57981F68 /* Pods-SoundBase.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.debug.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.debug.xcconfig"; sourceTree = "<group>"; };
 		3A092146B6FC47719426BEA3 /* MediaPlayerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlayerManager.swift; sourceTree = "<group>"; };
+		3E3D721394FB81CB13DCF086 /* DownloadManagerViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DownloadManagerViewController.swift; sourceTree = "<group>"; };
 		D34462C65A350D09062BC27F /* Pods-SoundBase.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.release.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.release.xcconfig"; sourceTree = "<group>"; };
 		E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SoundBase.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -74,6 +77,7 @@
 				24E74FD42F21EB750057F944 /* AudioPlayerViewController.swift */,
 				24E74FDC2F21FEAD0057F944 /* OfflinePlaylistViewController.swift */,
 				24E74FDE2F21FEB40057F944 /* SettingsViewController.swift */,
+				3E3D721394FB81CB13DCF086 /* DownloadManagerViewController.swift */,
 			);
 			path = Pages;
 			sourceTree = "<group>";
@@ -118,6 +122,7 @@
 				24E74FC02F21E82B0057F944 /* Info.plist */,
 				24E74FC22F21E82B0057F944 /* LaunchScreen.storyboard */,
 				24E74FC42F21E82B0057F944 /* Main.storyboard */,
+				24095E262F2371F500DCD76A /* plan.md */,
 			);
 			path = SoundBase;
 			sourceTree = "<group>";
@@ -262,6 +267,7 @@
 				24E74FD72F21FE980057F944 /* AudioFileManager.swift in Sources */,
 				24E74FCA2F21E82B0057F944 /* ViewController.swift in Sources */,
 				24E74FDD2F21FEAD0057F944 /* OfflinePlaylistViewController.swift in Sources */,
+				EFA4741B58ADBD0FB154BFCF /* DownloadManagerViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

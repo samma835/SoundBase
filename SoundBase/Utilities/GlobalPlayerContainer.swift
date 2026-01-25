@@ -135,8 +135,17 @@ class GlobalPlayerContainer {
         guard let userInfo = notification.userInfo,
               let isPlaying = userInfo["isPlaying"] as? Bool else { return }
         
-        // 当开始播放时显示 mini player
-        if isPlaying && miniPlayerView?.isHidden == true {
+        // 检查是否在播放器详情页
+        let isInPlayerDetail: Bool = {
+            guard let tabBarController = containerViewController as? UITabBarController,
+                  let selectedNav = tabBarController.selectedViewController as? UINavigationController else {
+                return false
+            }
+            return selectedNav.topViewController is AudioPlayerViewController
+        }()
+        
+        // 当开始播放时显示 mini player，但如果在播放器详情页则不显示
+        if isPlaying && miniPlayerView?.isHidden == true && !isInPlayerDetail {
             let playerManager = MediaPlayerManager.shared
             show(
                 title: playerManager.currentTitle,

@@ -201,11 +201,15 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
     func duration() -> CMTime {
         // 优先使用 asset.duration 而不是 playerItem.duration
         // 这样可以避免某些音频文件（如YouTube下载的M4A）时长计算错误的问题
+        //
+        // 注意：iOS 16+ 废弃了同步的 duration 属性，推荐使用异步的 load(.duration)
+        // 但由于此方法需要同步返回结果（用于UI实时更新），我们继续使用废弃的API
+        // 这是一个已知的权衡：废弃警告 vs 同步性能需求
         if let currentItem = player?.currentItem,
            let asset = currentItem.asset as? AVURLAsset {
-            return asset.duration
+            return asset.duration  // Warning expected on iOS 16+
         }
-        return player?.currentItem?.duration ?? .zero
+        return player?.currentItem?.duration ?? .zero  // Warning expected on iOS 16+
     }
     
     // MARK: - KVO

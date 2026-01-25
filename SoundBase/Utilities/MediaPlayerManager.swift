@@ -206,7 +206,41 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         // 注意：iOS 16+ 废弃了同步的 duration 属性，推荐使用异步的 load(.duration)
         // 但由于此方法需要同步返回结果（用于UI实时更新），我们继续使用废弃的API
         // 这是一个已知的权衡：废弃警告 vs 同步性能需求
-        return player?.currentItem?.duration ?? .zero  // Warning expected on iOS 16+
+        
+        guard let currentItem = player?.currentItem else { return .zero }
+        let rawDuration = currentItem.duration  // Warning expected on iOS 16+
+        
+        // 检测并修正时长翻倍问题
+        // 某些M4A文件（特别是从YouTube下载的）元数据错误，导致duration是实际值的2倍
+        // 通过计算比特率来检测：如果比特率异常低（<100kbps），则很可能是时长翻倍了
+        if let asset = currentItem.asset as? AVURLAsset,
+           let fileURL = (asset.url as URL?) {
+            // 只对本地文件进行检测（远程流无法准确计算）
+            if fileURL.isFileURL {
+                let durationSeconds = CMTimeGetSeconds(rawDuration)
+                if durationSeconds > 0 && !durationSeconds.isNaN && !durationSeconds.isInfinite {
+                    // 获取文件大小
+                    if let fileSize = try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int64 {
+                        // 计算比特率 (bits per second)
+                        let bitrate = (Double(fileSize) * 8) / durationSeconds
+                        
+                        // 正常的AAC音频比特率应该在 64kbps - 320kbps 之间
+                        // 如果计算出的比特率 < 100kbps，很可能是时长翻倍了
+                        if bitrate < 100000 {
+                            // 时长减半
+                            let correctedDuration = CMTime(
+                                value: rawDuration.value / 2,
+                                timescale: rawDuration.timescale
+                            )
+                            print("⚠️ [播放器] 检测到时长异常，已修正: \(durationSeconds)s -> \(CMTimeGetSeconds(correctedDuration))s (bitrate: \(Int(bitrate)) bps)")
+                            return correctedDuration
+                        }
+                    }
+                }
+            }
+        }
+        
+        return rawDuration
     }
     
     // MARK: - KVO

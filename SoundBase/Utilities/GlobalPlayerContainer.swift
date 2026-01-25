@@ -125,6 +125,7 @@ class GlobalPlayerContainer {
         }
         
         let playlistVC = PlaylistViewController()
+        playlistVC.hidesBottomBarWhenPushed = true
         selectedNav.pushViewController(playlistVC, animated: true)
         
         print("📱 [全局播放器] 打开播放列表")

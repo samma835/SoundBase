@@ -270,21 +270,14 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
     }
     
     private func startPlaying(video: VideoSearchResult, audioURL: URL) {
-        // 加载缩略图
-        var thumbnailImage: UIImage?
-        if let thumbnailURL = video.thumbnailURL,
-           let imageData = try? Data(contentsOf: thumbnailURL) {
-            thumbnailImage = UIImage(data: imageData)
-        }
-        
-        // 添加到播放列表并播放
+        // 添加到播放列表并播放（不传artwork，让PlaylistManager异步加载）
         PlaylistManager.shared.addAndPlay(
             videoId: video.videoId,
             title: video.title,
             artist: video.channelTitle,
             thumbnailURL: video.thumbnailURL,
             audioURL: audioURL,
-            artwork: thumbnailImage
+            artwork: nil
         )
         
         showAlert(title: "开始播放", message: video.title)

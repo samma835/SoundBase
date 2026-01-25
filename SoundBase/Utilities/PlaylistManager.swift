@@ -27,6 +27,14 @@ struct PlaylistItem: Codable, Equatable {
 extension Notification.Name {
     static let playlistUpdated = Notification.Name("playlistUpdated")
     static let currentTrackChanged = Notification.Name("currentTrackChanged")
+    static let playModeChanged = Notification.Name("playModeChanged")
+}
+
+// 循环模式
+enum RepeatMode: String, Codable {
+    case off = "off"           // 不循环
+    case all = "all"           // 全部循环
+    case one = "one"           // 单曲循环
 }
 
 class PlaylistManager {
@@ -40,6 +48,13 @@ class PlaylistManager {
     
     // 当前播放的索引
     private(set) var currentIndex: Int? = nil
+    
+    // 播放模式
+    private(set) var repeatMode: RepeatMode = .off
+    private(set) var isShuffleEnabled: Bool = false
+    
+    // 随机播放的历史记录（避免重复播放）
+    private var shuffleHistory: [Int] = []
     
     private init() {
         loadPlaylist()
@@ -193,17 +208,66 @@ class PlaylistManager {
         return playlist
     }
     
+    // 切换循环模式
+    func toggleRepeatMode() -> RepeatMode {
+        switch repeatMode {
+        case .off:
+            repeatMode = .all
+        case .all:
+            repeatMode = .one
+        case .one:
+            repeatMode = .off
+        }
+        savePlaylist()
+        notifyPlayModeChanged()
+        print("🔁 [播放模式] 循环: \(repeatMode.rawValue)")
+        return repeatMode
+    }
+    
+    // 切换随机模式
+    func toggleShuffle() -> Bool {
+        isShuffleEnabled.toggle()
+        if !isShuffleEnabled {
+            shuffleHistory.removeAll()
+        }
+        savePlaylist()
+        notifyPlayModeChanged()
+        print("🔀 [播放模式] 随机: \(isShuffleEnabled)")
+        return isShuffleEnabled
+    }
+    
+    // 获取循环模式
+    func getRepeatMode() -> RepeatMode {
+        return repeatMode
+    }
+    
+    // 获取随机模式
+    func getShuffleEnabled() -> Bool {
+        return isShuffleEnabled
+    }
+    
     // MARK: - Private Methods
     
     private func playItem(at index: Int) {
         let item = playlist[index]
         
-        // 加载缩略图
+        // 加载缩略图（全部异步）
         var artwork: UIImage?
         if let thumbnailURL = item.thumbnailURL {
             if thumbnailURL.isFileURL {
-                if let data = try? Data(contentsOf: thumbnailURL) {
-                    artwork = UIImage(data: data)
+                // 本地文件也用异步加载
+                DispatchQueue.global(qos: .userInitiated).async {
+                    if let data = try? Data(contentsOf: thumbnailURL),
+                       let image = UIImage(data: data) {
+                        DispatchQueue.main.async {
+                            GlobalPlayerContainer.shared.updateInfo(
+                                title: item.title,
+                                artist: item.artist,
+                                artwork: image,
+                                video: nil
+                            )
+                        }
+                    }
                 }
             } else {
                 // 异步加载远程图片
@@ -265,8 +329,66 @@ class PlaylistManager {
     
     @objc private func playbackFinished() {
         print("🎵 [播放列表] 当前音频播放完成，尝试播放下一首")
-        // 自动播放下一首
-        _ = playNext()
+        
+        // 单曲循环
+        if repeatMode == .one {
+            guard let index = currentIndex else { return }
+            playItem(at: index)
+            return
+        }
+        
+        // 随机播放
+        if isShuffleEnabled {
+            playRandomNext()
+            return
+        }
+        
+        // 顺序播放
+        if let current = currentIndex {
+            let nextIndex = current + 1
+            
+            if nextIndex < playlist.count {
+                play(at: nextIndex)
+            } else if repeatMode == .all {
+                // 全部循环 - 回到第一首
+                play(at: 0)
+            } else {
+                // 不循环 - 停止播放
+                print("🎵 [播放列表] 已播放完所有音频")
+            }
+        }
+    }
+    
+    // 随机播放下一首
+    private func playRandomNext() {
+        guard playlist.count > 0 else { return }
+        
+        // 如果只有一首歌，重复播放
+        if playlist.count == 1 {
+            playItem(at: 0)
+            return
+        }
+        
+        // 如果已经播放完所有歌曲，清空历史
+        if shuffleHistory.count >= playlist.count {
+            shuffleHistory.removeAll()
+        }
+        
+        // 获取未播放过的索引
+        var availableIndices = Array(0..<playlist.count)
+        availableIndices = availableIndices.filter { !shuffleHistory.contains($0) }
+        
+        // 如果没有可用的，清空历史重新开始
+        if availableIndices.isEmpty {
+            shuffleHistory.removeAll()
+            availableIndices = Array(0..<playlist.count)
+        }
+        
+        // 随机选择一个
+        if let randomIndex = availableIndices.randomElement() {
+            shuffleHistory.append(randomIndex)
+            play(at: randomIndex)
+        }
     }
     
     private func notifyPlaylistUpdated() {
@@ -275,6 +397,13 @@ class PlaylistManager {
     
     private func notifyCurrentTrackChanged() {
         NotificationCenter.default.post(name: .currentTrackChanged, object: nil)
+    }
+    
+    private func notifyPlayModeChanged() {
+        NotificationCenter.default.post(name: .playModeChanged, object: nil, userInfo: [
+            "repeatMode": repeatMode.rawValue,
+            "isShuffleEnabled": isShuffleEnabled
+        ])
     }
     
     // MARK: - Persistence
@@ -294,7 +423,9 @@ class PlaylistManager {
                     "addedDate": ISO8601DateFormatter().string(from: item.addedDate)
                 ]
             },
-            "currentIndex": currentIndex ?? -1
+            "currentIndex": currentIndex ?? -1,
+            "repeatMode": repeatMode.rawValue,
+            "isShuffleEnabled": isShuffleEnabled
         ]
         
         do {
@@ -358,7 +489,17 @@ class PlaylistManager {
                 currentIndex = index
             }
             
-            print("💾 [播放列表] 已加载: \(playlist.count) 首, 当前索引: \(currentIndex ?? -1)")
+            // 加载播放模式
+            if let repeatModeString = data["repeatMode"] as? String,
+               let mode = RepeatMode(rawValue: repeatModeString) {
+                repeatMode = mode
+            }
+            
+            if let shuffle = data["isShuffleEnabled"] as? Bool {
+                isShuffleEnabled = shuffle
+            }
+            
+            print("💾 [播放列表] 已加载: \(playlist.count) 首, 当前索引: \(currentIndex ?? -1), 循环: \(repeatMode.rawValue), 随机: \(isShuffleEnabled)")
         } catch {
             print("❌ [播放列表] 加载失败: \(error.localizedDescription)")
         }

@@ -117,23 +117,47 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
             return
         }
         
-        // 加载缩略图
+        // 加载本地缩略图（使用异步方式）
         var artwork: UIImage?
-        if let thumbnailURL = audio.thumbnailURL,
-           let data = try? Data(contentsOf: thumbnailURL),
-           let image = UIImage(data: data) {
-            artwork = image
+        if let thumbnailURL = audio.thumbnailURL, thumbnailURL.isFileURL {
+            DispatchQueue.global(qos: .userInitiated).async {
+                if let data = try? Data(contentsOf: thumbnailURL),
+                   let image = UIImage(data: data) {
+                    DispatchQueue.main.async {
+                        PlaylistManager.shared.addAndPlay(
+                            videoId: audio.videoId,
+                            title: audio.title,
+                            artist: audio.channelTitle,
+                            thumbnailURL: audio.thumbnailURL,
+                            audioURL: audio.fileURL,
+                            artwork: image
+                        )
+                    }
+                } else {
+                    // 没有缩略图也继续播放
+                    DispatchQueue.main.async {
+                        PlaylistManager.shared.addAndPlay(
+                            videoId: audio.videoId,
+                            title: audio.title,
+                            artist: audio.channelTitle,
+                            thumbnailURL: audio.thumbnailURL,
+                            audioURL: audio.fileURL,
+                            artwork: nil
+                        )
+                    }
+                }
+            }
+        } else {
+            // 添加到播放列表并播放
+            PlaylistManager.shared.addAndPlay(
+                videoId: audio.videoId,
+                title: audio.title,
+                artist: audio.channelTitle,
+                thumbnailURL: audio.thumbnailURL,
+                audioURL: audio.fileURL,
+                artwork: nil
+            )
         }
-        
-        // 添加到播放列表并播放
-        PlaylistManager.shared.addAndPlay(
-            videoId: audio.videoId,
-            title: audio.title,
-            artist: audio.channelTitle,
-            thumbnailURL: audio.thumbnailURL,
-            audioURL: audio.fileURL,
-            artwork: artwork
-        )
         
         print("🎵 [离线播放] 开始播放: \(audio.title)")
     }

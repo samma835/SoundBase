@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1AE1481812E0A886C6A75816 /* AudioPlayerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EDFEA9D2A2CD1F98F54464E /* AudioPlayerViewController.swift */; };
 		24095E292F242E1800DCD76A /* MiniPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24095E282F242E1800DCD76A /* MiniPlayerView.swift */; };
 		24095E2B2F242E2600DCD76A /* GlobalPlayerContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24095E2A2F242E2600DCD76A /* GlobalPlayerContainer.swift */; };
 		24E74FC82F21E82B0057F944 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FBE2F21E82B0057F944 /* AppDelegate.swift */; };

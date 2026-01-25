@@ -173,6 +173,17 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         }
     }
     
+    // 设置播放速度
+    func setPlaybackRate(_ rate: Float) {
+        player?.rate = rate
+        print("⚡ [播放器管理] 设置播放速度: \(rate)x")
+    }
+    
+    // 获取当前播放速度
+    func getPlaybackRate() -> Float {
+        return player?.rate ?? 1.0
+    }
+    
     func seek(to time: CMTime, completion: ((Bool) -> Void)? = nil) {
         player?.seek(to: time) { finished in
             completion?(finished)

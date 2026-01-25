@@ -70,8 +70,8 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         // 监听播放进度
         let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self,
-                  let duration = self.player?.currentItem?.duration else { return }
+            guard let self = self else { return }
+            let duration = self.duration()
             NotificationCenter.default.post(
                 name: MediaPlayerManager.timeUpdateNotification,
                 object: nil,
@@ -131,8 +131,8 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         // 监听播放进度
         let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self,
-                  let duration = self.player?.currentItem?.duration else { return }
+            guard let self = self else { return }
+            let duration = self.duration()
             NotificationCenter.default.post(
                 name: MediaPlayerManager.timeUpdateNotification,
                 object: nil,
@@ -199,6 +199,12 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
     }
     
     func duration() -> CMTime {
+        // 优先使用 asset.duration 而不是 playerItem.duration
+        // 这样可以避免某些音频文件（如YouTube下载的M4A）时长计算错误的问题
+        if let currentItem = player?.currentItem,
+           let asset = currentItem.asset as? AVURLAsset {
+            return asset.duration
+        }
         return player?.currentItem?.duration ?? .zero
     }
     

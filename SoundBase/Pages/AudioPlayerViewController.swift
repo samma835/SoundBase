@@ -151,7 +151,10 @@ class AudioPlayerViewController: UIViewController {
     
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        if playerManager.isPlaying() {
+        // 只在页面被pop/dismiss时显示全局播放器
+        // isMovingFromParent表示页面正在从导航栈中移除
+        // isBeingDismissed表示页面正在被dismiss
+        if (isMovingFromParent || isBeingDismissed) && playerManager.isPlaying() {
             showGlobalPlayer()
         }
     }

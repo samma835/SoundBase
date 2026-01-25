@@ -15,8 +15,24 @@ struct PlaylistItem: Codable, Equatable {
     let title: String
     let artist: String
     let thumbnailURL: URL?
-    let audioURL: URL  // 本地文件或远程URL
+    let audioFileName: String?  // 本地文件名（如果是下载的音频）
+    let audioURLString: String?  // 远程URL字符串（如果是在线音频）
     let addedDate: Date
+    
+    // 动态计算实际的音频URL
+    var audioURL: URL {
+        if let fileName = audioFileName {
+            // 本地文件 - 动态构建完整路径
+            let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            return documentsDirectory.appendingPathComponent(fileName)
+        } else if let urlString = audioURLString, let url = URL(string: urlString) {
+            // 远程URL
+            return url
+        } else {
+            // 默认返回空URL（不应该发生）
+            return URL(fileURLWithPath: "")
+        }
+    }
     
     static func == (lhs: PlaylistItem, rhs: PlaylistItem) -> Bool {
         return lhs.id == rhs.id
@@ -65,13 +81,28 @@ class PlaylistManager {
     
     // 添加并播放（插入到当前播放的下一个位置）
     func addAndPlay(videoId: String, title: String, artist: String, thumbnailURL: URL?, audioURL: URL, artwork: UIImage?) {
+        // 判断是本地文件还是远程URL
+        let fileName: String?
+        let urlString: String?
+        
+        if audioURL.isFileURL {
+            // 本地文件 - 只保存文件名
+            fileName = audioURL.lastPathComponent
+            urlString = nil
+        } else {
+            // 远程URL - 保存URL字符串
+            fileName = nil
+            urlString = audioURL.absoluteString
+        }
+        
         let item = PlaylistItem(
             id: UUID().uuidString,
             videoId: videoId,
             title: title,
             artist: artist,
             thumbnailURL: thumbnailURL,
-            audioURL: audioURL,
+            audioFileName: fileName,
+            audioURLString: urlString,
             addedDate: Date()
         )
         
@@ -485,7 +516,8 @@ class PlaylistManager {
                     "title": item.title,
                     "artist": item.artist,
                     "thumbnailURL": item.thumbnailURL?.absoluteString ?? "",
-                    "audioURL": item.audioURL.absoluteString,
+                    "audioFileName": item.audioFileName ?? "",
+                    "audioURLString": item.audioURLString ?? "",
                     "addedDate": ISO8601DateFormatter().string(from: item.addedDate)
                 ]
             },
@@ -524,8 +556,6 @@ class PlaylistManager {
                           let videoId = dict["videoId"] as? String,
                           let title = dict["title"] as? String,
                           let artist = dict["artist"] as? String,
-                          let audioURLString = dict["audioURL"] as? String,
-                          let audioURL = URL(string: audioURLString),
                           let addedDateString = dict["addedDate"] as? String,
                           let addedDate = ISO8601DateFormatter().date(from: addedDateString) else {
                         return nil
@@ -538,13 +568,34 @@ class PlaylistManager {
                         thumbnailURL = nil
                     }
                     
+                    // 兼容旧格式和新格式
+                    let audioFileName = dict["audioFileName"] as? String
+                    let audioURLString = dict["audioURLString"] as? String
+                    
+                    // 如果都为空，尝试从旧的 audioURL 字段读取
+                    var finalFileName: String? = audioFileName
+                    var finalURLString: String? = audioURLString
+                    
+                    if audioFileName == nil && audioURLString == nil {
+                        // 兼容旧数据格式
+                        if let oldAudioURLString = dict["audioURL"] as? String,
+                           let oldURL = URL(string: oldAudioURLString) {
+                            if oldURL.isFileURL {
+                                finalFileName = oldURL.lastPathComponent
+                            } else {
+                                finalURLString = oldAudioURLString
+                            }
+                        }
+                    }
+                    
                     return PlaylistItem(
                         id: id,
                         videoId: videoId,
                         title: title,
                         artist: artist,
                         thumbnailURL: thumbnailURL,
-                        audioURL: audioURL,
+                        audioFileName: finalFileName,
+                        audioURLString: finalURLString,
                         addedDate: addedDate
                     )
                 }

@@ -99,11 +99,9 @@ class AudioPlayerViewController: UIViewController {
         return button
     }()
     
-    private lazy var videoButton: UIButton = {
-        let button = createControlButton(icon: "play.rectangle", size: 20)
-        button.addTarget(self, action: #selector(videoButtonTapped), for: .touchUpInside)
-        button.alpha = 0.3
-        button.isEnabled = false
+    private lazy var playlistButton: UIButton = {
+        let button = createControlButton(icon: "list.bullet", size: 20)
+        button.addTarget(self, action: #selector(playlistButtonTapped), for: .touchUpInside)
         return button
     }()
     
@@ -141,6 +139,7 @@ class AudioPlayerViewController: UIViewController {
         loadVideoInfo()
         setupNotifications()
         updatePlayModeButtons()
+        updateDownloadButtonState()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -175,7 +174,7 @@ class AudioPlayerViewController: UIViewController {
         view.addSubview(durationLabel)
         
         let topControlsStack = UIStackView(arrangedSubviews: [
-            repeatButton, shuffleButton, speedButton, downloadButton, videoButton
+            repeatButton, shuffleButton, speedButton, downloadButton, playlistButton
         ])
         topControlsStack.axis = .horizontal
         topControlsStack.distribution = .equalSpacing
@@ -283,6 +282,20 @@ class AudioPlayerViewController: UIViewController {
             name: .playModeChanged,
             object: nil
         )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(currentTrackChanged),
+            name: .currentTrackChanged,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(downloadCompleted),
+            name: .downloadCompleted,
+            object: nil
+        )
     }
     
     @objc private func albumArtTapped() {
@@ -347,8 +360,10 @@ class AudioPlayerViewController: UIViewController {
         }
     }
     
-    @objc private func videoButtonTapped() {
-        showAlert(title: "提示", message: "查看视频功能即将推出")
+    @objc private func playlistButtonTapped() {
+        let playlistVC = PlaylistViewController()
+        playlistVC.hidesBottomBarWhenPushed = true
+        navigationController?.pushViewController(playlistVC, animated: true)
     }
     
     @objc private func previousButtonTapped() {
@@ -385,6 +400,42 @@ class AudioPlayerViewController: UIViewController {
     
     @objc private func playModeChanged() {
         updatePlayModeButtons()
+    }
+    
+    @objc private func currentTrackChanged() {
+        // 当切换曲目时，更新详情页的信息
+        if let currentItem = playlistManager.getCurrentItem() {
+            titleLabel.text = currentItem.title
+            artistLabel.text = currentItem.artist
+            
+            // 加载新的封面图
+            if let thumbnailURL = currentItem.thumbnailURL {
+                loadImage(from: thumbnailURL)
+            }
+            
+            // 更新下载按钮状态
+            updateDownloadButtonState()
+        }
+    }
+    
+    @objc private func downloadCompleted(_ notification: Notification) {
+        // 下载完成后更新按钮状态
+        updateDownloadButtonState()
+    }
+    
+    private func updateDownloadButtonState() {
+        // 检查当前视频是否已下载
+        let isDownloaded = AudioFileManager.shared.isDownloaded(videoId: video.videoId) != nil
+        
+        if isDownloaded {
+            downloadButton.alpha = 0.3
+            downloadButton.isEnabled = false
+            downloadButton.tintColor = .systemGreen
+        } else {
+            downloadButton.alpha = 1.0
+            downloadButton.isEnabled = true
+            downloadButton.tintColor = .label
+        }
     }
     
     private func updatePlayButtonState() {

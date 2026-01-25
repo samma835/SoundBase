@@ -126,11 +126,32 @@ class PlaylistManager {
     
     // 播放下一首
     func playNext() -> Bool {
-        guard let current = currentIndex else { return false }
+        guard playlist.count > 0 else { return false }
+        
+        // 如果开启了随机，随机播放
+        if isShuffleEnabled {
+            playRandomNext()
+            return true
+        }
+        
+        guard let current = currentIndex else {
+            // 如果没有当前索引，播放第一首
+            play(at: 0)
+            return true
+        }
+        
         let nextIndex = current + 1
         
         if nextIndex < playlist.count {
             play(at: nextIndex)
+            return true
+        }
+        
+        // 已经是最后一首
+        if repeatMode == .all {
+            // 全部循环 - 从头开始
+            play(at: 0)
+            print("🎵 [播放列表] 循环到第一首")
             return true
         }
         
@@ -140,11 +161,32 @@ class PlaylistManager {
     
     // 播放上一首
     func playPrevious() -> Bool {
-        guard let current = currentIndex else { return false }
+        guard playlist.count > 0 else { return false }
+        
+        // 如果开启了随机，随机播放
+        if isShuffleEnabled {
+            playRandomPrevious()
+            return true
+        }
+        
+        guard let current = currentIndex else {
+            // 如果没有当前索引，播放最后一首
+            play(at: playlist.count - 1)
+            return true
+        }
+        
         let previousIndex = current - 1
         
         if previousIndex >= 0 {
             play(at: previousIndex)
+            return true
+        }
+        
+        // 已经是第一首
+        if repeatMode == .all {
+            // 全部循环 - 跳到最后一首
+            play(at: playlist.count - 1)
+            print("🎵 [播放列表] 循环到最后一首")
             return true
         }
         
@@ -387,6 +429,30 @@ class PlaylistManager {
         // 随机选择一个
         if let randomIndex = availableIndices.randomElement() {
             shuffleHistory.append(randomIndex)
+            play(at: randomIndex)
+        }
+    }
+    
+    // 随机播放上一首
+    private func playRandomPrevious() {
+        guard playlist.count > 0 else { return }
+        
+        // 如果只有一首歌，重复播放
+        if playlist.count == 1 {
+            playItem(at: 0)
+            return
+        }
+        
+        // 随机选择一个不同的索引
+        var availableIndices = Array(0..<playlist.count)
+        
+        // 排除当前播放的索引
+        if let current = currentIndex {
+            availableIndices.removeAll { $0 == current }
+        }
+        
+        // 随机选择一个
+        if let randomIndex = availableIndices.randomElement() {
             play(at: randomIndex)
         }
     }

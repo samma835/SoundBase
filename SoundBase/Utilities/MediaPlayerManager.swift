@@ -72,6 +72,21 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             let duration = self.duration()
+            
+            // 检查是否播放完成（考虑到时长修正的情况）
+            let currentSeconds = CMTimeGetSeconds(time)
+            let durationSeconds = CMTimeGetSeconds(duration)
+            
+            if !durationSeconds.isNaN && !durationSeconds.isInfinite && durationSeconds > 0 {
+                // 如果当前时间 >= 修正后的时长，说明播放完成
+                if currentSeconds >= durationSeconds {
+                    // 停止播放并触发完成事件
+                    self.player?.pause()
+                    self.playerDidFinishPlaying()
+                    return
+                }
+            }
+            
             NotificationCenter.default.post(
                 name: MediaPlayerManager.timeUpdateNotification,
                 object: nil,
@@ -133,6 +148,21 @@ class MediaPlayerManager: NSObject {  // 继承自NSObject以支持KVO
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             let duration = self.duration()
+            
+            // 检查是否播放完成（考虑到时长修正的情况）
+            let currentSeconds = CMTimeGetSeconds(time)
+            let durationSeconds = CMTimeGetSeconds(duration)
+            
+            if !durationSeconds.isNaN && !durationSeconds.isInfinite && durationSeconds > 0 {
+                // 如果当前时间 >= 修正后的时长，说明播放完成
+                if currentSeconds >= durationSeconds {
+                    // 停止播放并触发完成事件
+                    self.player?.pause()
+                    self.playerDidFinishPlaying()
+                    return
+                }
+            }
+            
             NotificationCenter.default.post(
                 name: MediaPlayerManager.timeUpdateNotification,
                 object: nil,

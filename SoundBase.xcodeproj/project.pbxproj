@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		24095E292F242E1800DCD76A /* MiniPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24095E282F242E1800DCD76A /* MiniPlayerView.swift */; };
 		24095E2B2F242E2600DCD76A /* GlobalPlayerContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24095E2A2F242E2600DCD76A /* GlobalPlayerContainer.swift */; };
-		24095E312F26406400DCD76A /* 送你一朵小紅花 - 趙英俊 【《送你一朵小紅花》 同名主題曲】（動態歌詞 Lyrics Video）{送你一朵小红花 赵英俊}.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 24095E302F26406400DCD76A /* 送你一朵小紅花 - 趙英俊 【《送你一朵小紅花》 同名主題曲】（動態歌詞 Lyrics Video）{送你一朵小红花 赵英俊}.m4a */; };
 		24E74FC82F21E82B0057F944 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FBE2F21E82B0057F944 /* AppDelegate.swift */; };
 		24E74FC92F21E82B0057F944 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FC52F21E82B0057F944 /* SceneDelegate.swift */; };
 		24E74FCA2F21E82B0057F944 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24E74FC62F21E82B0057F944 /* ViewController.swift */; };
@@ -35,7 +34,6 @@
 		24095E262F2371F500DCD76A /* plan.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = plan.md; sourceTree = "<group>"; };
 		24095E282F242E1800DCD76A /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
 		24095E2A2F242E2600DCD76A /* GlobalPlayerContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalPlayerContainer.swift; sourceTree = "<group>"; };
-		24095E302F26406400DCD76A /* 送你一朵小紅花 - 趙英俊 【《送你一朵小紅花》 同名主題曲】（動態歌詞 Lyrics Video）{送你一朵小红花 赵英俊}.m4a */ = {isa = PBXFileReference; lastKnownFileType = file; path = "送你一朵小紅花 - 趙英俊 【《送你一朵小紅花》 同名主題曲】（動態歌詞 Lyrics Video）{送你一朵小红花 赵英俊}.m4a"; sourceTree = "<group>"; };
 		24E74FA62F21E8240057F944 /* SoundBase.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SoundBase.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		24E74FBE2F21E82B0057F944 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		24E74FBF2F21E82B0057F944 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -105,14 +103,6 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
-		24095E2F2F26405300DCD76A /* m4a */ = {
-			isa = PBXGroup;
-			children = (
-				24095E302F26406400DCD76A /* 送你一朵小紅花 - 趙英俊 【《送你一朵小紅花》 同名主題曲】（動態歌詞 Lyrics Video）{送你一朵小红花 赵英俊}.m4a */,
-			);
-			path = m4a;
-			sourceTree = "<group>";
-		};
 		24E74F9D2F21E8240057F944 = {
 			isa = PBXGroup;
 			children = (
@@ -134,7 +124,6 @@
 		24E74FC72F21E82B0057F944 /* SoundBase */ = {
 			isa = PBXGroup;
 			children = (
-				24095E2F2F26405300DCD76A /* m4a */,
 				24095E252F236C5700DCD76A /* Utilities */,
 				24095E242F236C3B00DCD76A /* Pages */,
 				24E74FBE2F21E82B0057F944 /* AppDelegate.swift */,
@@ -223,7 +212,6 @@
 			files = (
 				24E74FCB2F21E82B0057F944 /* Assets.xcassets in Resources */,
 				24E74FCD2F21E82B0057F944 /* LaunchScreen.storyboard in Resources */,
-				24095E312F26406400DCD76A /* 送你一朵小紅花 - 趙英俊 【《送你一朵小紅花》 同名主題曲】（動態歌詞 Lyrics Video）{送你一朵小红花 赵英俊}.m4a in Resources */,
 				24E74FCE2F21E82B0057F944 /* Main.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

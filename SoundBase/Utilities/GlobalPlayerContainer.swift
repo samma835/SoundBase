@@ -71,6 +71,11 @@ class GlobalPlayerContainer {
         
         guard miniPlayerView?.isHidden == true else { return }
         
+        // 检查是否在播放器详情页，如果是则不显示迷你播放器
+        if isInPlayerDetailPage() {
+            return
+        }
+        
         miniPlayerView?.isHidden = false
         
         UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
@@ -131,21 +136,21 @@ class GlobalPlayerContainer {
         print("📱 [全局播放器] 打开播放列表")
     }
     
+    // 检查当前是否在播放器详情页
+    private func isInPlayerDetailPage() -> Bool {
+        guard let tabBarController = containerViewController as? UITabBarController,
+              let selectedNav = tabBarController.selectedViewController as? UINavigationController else {
+            return false
+        }
+        return selectedNav.topViewController is AudioPlayerViewController
+    }
+    
     @objc private func playbackStateChanged(_ notification: Notification) {
         guard let userInfo = notification.userInfo,
               let isPlaying = userInfo["isPlaying"] as? Bool else { return }
         
-        // 检查是否在播放器详情页
-        let isInPlayerDetail: Bool = {
-            guard let tabBarController = containerViewController as? UITabBarController,
-                  let selectedNav = tabBarController.selectedViewController as? UINavigationController else {
-                return false
-            }
-            return selectedNav.topViewController is AudioPlayerViewController
-        }()
-        
         // 当开始播放时显示 mini player，但如果在播放器详情页则不显示
-        if isPlaying && miniPlayerView?.isHidden == true && !isInPlayerDetail {
+        if isPlaying && miniPlayerView?.isHidden == true && !isInPlayerDetailPage() {
             let playerManager = MediaPlayerManager.shared
             show(
                 title: playerManager.currentTitle,

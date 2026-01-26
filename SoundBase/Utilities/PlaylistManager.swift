@@ -16,11 +16,16 @@ struct PlaylistItem: Codable, Equatable {
     let artist: String
     let thumbnailURL: URL?
     let audioFileName: String?  // 本地文件名（如果是下载的音频）
-    let audioURLString: String?  // 远程URL字符串（如果是在线音频）
+    var audioURLString: String?  // 远程URL字符串（如果是在线音频）
     let addedDate: Date
+    var isParsing: Bool  // 是否正在解析链接
     
     // 动态计算实际的音频URL
-    var audioURL: URL {
+    var audioURL: URL? {
+        if isParsing {
+            return nil  // 解析中，还没有URL
+        }
+        
         if let fileName = audioFileName {
             // 本地文件 - 动态构建完整路径
             let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -103,7 +108,8 @@ class PlaylistManager {
             thumbnailURL: thumbnailURL,
             audioFileName: fileName,
             audioURLString: urlString,
-            addedDate: Date()
+            addedDate: Date(),
+            isParsing: false
         )
         
         // 检查是否已存在相同的视频
@@ -139,6 +145,99 @@ class PlaylistManager {
         playItem(at: currentIndex!)
         
         print("🎵 [播放列表] 添加并播放: \(title), 当前位置: \(currentIndex!)")
+    }
+    
+    // 添加解析中的播放项（立即反馈，稍后更新URL）
+    func addAndPlayPending(videoId: String, title: String, artist: String, thumbnailURL: URL?) -> String {
+        let item = PlaylistItem(
+            id: UUID().uuidString,
+            videoId: videoId,
+            title: title,
+            artist: artist,
+            thumbnailURL: thumbnailURL,
+            audioFileName: nil,
+            audioURLString: nil,
+            addedDate: Date(),
+            isParsing: true
+        )
+        
+        // 检查是否已存在相同的视频
+        if let existingIndex = playlist.firstIndex(where: { $0.videoId == videoId }) {
+            // 如果是当前播放的，直接返回
+            if currentIndex == existingIndex {
+                print("🎵 [播放列表] 已经在播放该音频")
+                return item.id
+            }
+            // 删除旧的
+            playlist.remove(at: existingIndex)
+            // 调整当前索引
+            if let current = currentIndex, existingIndex < current {
+                currentIndex = current - 1
+            }
+        }
+        
+        // 插入到当前播放的下一个位置
+        if let current = currentIndex {
+            let insertIndex = current + 1
+            playlist.insert(item, at: insertIndex)
+            currentIndex = insertIndex
+        } else {
+            // 没有当前播放，插入到头部
+            playlist.insert(item, at: 0)
+            currentIndex = 0
+        }
+        
+        savePlaylist()
+        notifyPlaylistUpdated()
+        
+        // 显示播放器，显示解析中状态
+        showPlayerWithParsingState(item: item)
+        
+        print("🎵 [播放列表] 添加解析中的项: \(title), 当前位置: \(currentIndex!)")
+        return item.id
+    }
+    
+    // 更新播放项的音频URL并开始播放
+    func updateItemAudioURLAndPlay(itemId: String, audioURL: URL) {
+        guard let index = playlist.firstIndex(where: { $0.id == itemId }) else {
+            print("❌ [播放列表] 找不到播放项: \(itemId)")
+            return
+        }
+        
+        var item = playlist[index]
+        
+        // 更新URL
+        if audioURL.isFileURL {
+            item.audioURLString = nil
+        } else {
+            item.audioURLString = audioURL.absoluteString
+        }
+        item.isParsing = false
+        
+        playlist[index] = item
+        savePlaylist()
+        notifyPlaylistUpdated()
+        
+        // 如果是当前项，开始播放
+        if currentIndex == index {
+            playItem(at: index)
+        }
+        
+        print("🎵 [播放列表] 更新并播放: \(item.title)")
+    }
+    
+    // 显示播放器（解析中状态）
+    private func showPlayerWithParsingState(item: PlaylistItem) {
+        // 更新全局播放器信息，显示解析中
+        GlobalPlayerContainer.shared.updateInfo(
+            title: item.title,
+            artist: "解析链接中...",
+            artwork: nil,
+            video: nil
+        )
+        
+        // 通知当前曲目变化
+        notifyCurrentTrackChanged()
     }
     
     // 播放指定索引的音频
@@ -251,6 +350,15 @@ class PlaylistManager {
         print("🎵 [播放列表] 删除索引: \(index)")
     }
     
+    // 通过itemId移除播放项
+    func removeItem(byId itemId: String) {
+        guard let index = playlist.firstIndex(where: { $0.id == itemId }) else {
+            print("❌ [播放列表] 找不到播放项: \(itemId)")
+            return
+        }
+        remove(at: index)
+    }
+    
     // 清空播放列表
     func clearAll() {
         let wasPlaying = currentIndex != nil
@@ -324,6 +432,24 @@ class PlaylistManager {
     private func playItem(at index: Int) {
         let item = playlist[index]
         
+        // 如果正在解析，只显示状态，不播放
+        if item.isParsing {
+            GlobalPlayerContainer.shared.updateInfo(
+                title: item.title,
+                artist: "解析链接中...",
+                artwork: nil,
+                video: nil
+            )
+            print("⏳ [播放列表] 等待解析完成: \(item.title)")
+            return
+        }
+        
+        // 检查是否有有效的音频URL
+        guard let audioURL = item.audioURL else {
+            print("❌ [播放列表] 无效的音频URL: \(item.title)")
+            return
+        }
+        
         // 加载缩略图（全部异步）
         var artwork: UIImage?
         if let thumbnailURL = item.thumbnailURL {
@@ -361,7 +487,7 @@ class PlaylistManager {
         
         // 播放音频
         MediaPlayerManager.shared.play(
-            url: item.audioURL,
+            url: audioURL,
             title: item.title,
             artist: item.artist,
             artwork: artwork
@@ -596,7 +722,8 @@ class PlaylistManager {
                         thumbnailURL: thumbnailURL,
                         audioFileName: finalFileName,
                         audioURLString: finalURLString,
-                        addedDate: addedDate
+                        addedDate: addedDate,
+                        isParsing: dict["isParsing"] as? Bool ?? false
                     )
                 }
             }

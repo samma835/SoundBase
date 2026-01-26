@@ -206,15 +206,30 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
     }
     
     private func playAudio(video: VideoSearchResult) {
+        // 立即添加到播放列表并显示播放器
+        let itemId = PlaylistManager.shared.addAndPlayPending(
+            videoId: video.videoId,
+            title: video.title,
+            artist: video.channelTitle,
+            thumbnailURL: video.thumbnailURL
+        )
+        
+        // 异步解析音频链接
         Task {
             do {
                 let audioURL = try await extractAudioURL(for: video)
                 
                 await MainActor.run {
-                    self.startPlaying(video: video, audioURL: audioURL)
+                    // 更新播放项的URL并开始播放
+                    PlaylistManager.shared.updateItemAudioURLAndPlay(
+                        itemId: itemId,
+                        audioURL: audioURL
+                    )
                 }
             } catch {
                 await MainActor.run {
+                    // 解析失败，移除播放项
+                    PlaylistManager.shared.removeItem(byId: itemId)
                     self.showAlert(title: "解析失败", message: error.localizedDescription)
                 }
             }

@@ -36,6 +36,7 @@ struct DownloadTask {
 }
 
 enum DownloadTaskStatus {
+    case parsing  // 解析链接中
     case downloading
     case paused
     case failed(String)
@@ -63,6 +64,8 @@ extension Notification.Name {
     static let downloadProgressUpdated = Notification.Name("downloadProgressUpdated")
     static let downloadCompleted = Notification.Name("downloadCompleted")
     static let downloadFailed = Notification.Name("downloadFailed")
+    static let downloadTaskCreated = Notification.Name("downloadTaskCreated")
+    static let downloadCountChanged = Notification.Name("downloadCountChanged")
 }
 
 class AudioFileManager: NSObject, URLSessionDownloadDelegate {
@@ -76,6 +79,9 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     
     // 跟踪正在下载的videoId
     private var downloadingVideoIds: Set<String> = []
+    
+    // 解析中的下载任务
+    private var parsingTasks: [String: DownloadTask] = [:]  // videoId -> DownloadTask
     
     // 暂停的下载任务 - 保存恢复数据
     private var pausedDownloads: [String: (resumeData: Data, videoId: String, title: String, channelTitle: String, thumbnailURL: URL?, sourceURL: URL)] = [:]
@@ -106,6 +112,9 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         print("📥 [下载] 开始下载: \(title)")
         print("📥 [下载] 下载链接: \(sourceURL.absoluteString)")
         
+        // 移除解析中的任务
+        removeParsingTask(videoId: videoId)
+        
         let fileName = sanitizeFileName(title) + ".m4a"
         let destinationURL = documentsDirectory.appendingPathComponent(fileName)
         
@@ -131,6 +140,7 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         removeFromFailedDownloads(videoId: videoId)
         
         task.resume()
+        notifyDownloadCountChanged()
         print("📥 [下载] 下载任务已启动 (ID: \(taskIdentifier))")
         print("📥 [下载] 可以退出页面，下载将在后台继续")
     }
@@ -185,6 +195,7 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .downloadCompleted, object: audio)
                 downloadInfo.completion(.success(audio))
+                self.notifyDownloadCountChanged()
             }
             
         } catch {
@@ -192,6 +203,7 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .downloadFailed, object: error)
                 downloadInfo.completion(.failure(error))
+                self.notifyDownloadCountChanged()
             }
         }
         
@@ -294,6 +306,11 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
     func getActiveDownloadTasks() -> [DownloadTask] {
         var tasks: [DownloadTask] = []
         
+        // 解析中的任务
+        for (_, task) in parsingTasks {
+            tasks.append(task)
+        }
+        
         // 正在下载的任务
         for (taskId, downloadInfo) in activeDownloads {
             tasks.append(DownloadTask(
@@ -323,6 +340,48 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         }
         
         return tasks
+    }
+    
+    // 创建解析中的下载任务
+    func createParsingTask(videoId: String, title: String, channelTitle: String, thumbnailURL: URL?) {
+        let task = DownloadTask(
+            videoId: videoId,
+            title: title,
+            channelTitle: channelTitle,
+            thumbnailURL: thumbnailURL,
+            progress: 0,
+            status: .parsing,
+            sourceURL: nil,
+            taskIdentifier: nil
+        )
+        parsingTasks[videoId] = task
+        
+        // 发送任务创建通知
+        NotificationCenter.default.post(name: .downloadTaskCreated, object: nil)
+        notifyDownloadCountChanged()
+        
+        print("🔍 [解析] 创建解析任务: \(title)")
+    }
+    
+    // 移除解析中的任务
+    func removeParsingTask(videoId: String) {
+        parsingTasks.removeValue(forKey: videoId)
+        notifyDownloadCountChanged()
+    }
+    
+    // 获取活跃下载数量（包括解析中）
+    func getActiveDownloadCount() -> Int {
+        return parsingTasks.count + activeDownloads.count + pausedDownloads.count
+    }
+    
+    // 通知下载数量变化
+    private func notifyDownloadCountChanged() {
+        let count = getActiveDownloadCount()
+        NotificationCenter.default.post(
+            name: .downloadCountChanged,
+            object: nil,
+            userInfo: ["count": count]
+        )
     }
     
     // 暂停下载
@@ -394,6 +453,7 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         pausedDownloads.removeValue(forKey: videoId)
         
         task.resume()
+        notifyDownloadCountChanged()
         print("▶️ [下载] 已继续: \(pausedInfo.title)")
         
         DispatchQueue.main.async {
@@ -419,6 +479,11 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         if pausedDownloads.removeValue(forKey: videoId) != nil {
             print("❌ [下载] 已从暂停列表移除: \(videoId)")
         }
+        
+        // 从解析列表中移除
+        removeParsingTask(videoId: videoId)
+        
+        notifyDownloadCountChanged()
     }
     
     // 获取所有失败的下载任务
@@ -448,14 +513,6 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         failedDownloads.removeAll()
         saveFailedDownloads()
         print("🧹 [清理] 已清理所有失败的下载")
-    }
-    
-    // 一键清理已完成的下载（仅清空列表，不删除文件）
-    func clearAllCompletedDownloads() throws {
-        let metadataURL = documentsDirectory.appendingPathComponent(metadataFileName)
-        try? FileManager.default.removeItem(at: metadataURL)
-        
-        print("🧹 [清理] 已清理所有已完成的下载列表（文件保留）")
     }
     
     // 更新音频标题

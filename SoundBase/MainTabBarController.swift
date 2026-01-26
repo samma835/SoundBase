@@ -13,6 +13,11 @@ class MainTabBarController: UITabBarController {
         super.viewDidLoad()
         setupTabBar()
         setupGlobalPlayer()
+        setupNotifications()
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     private func setupTabBar() {
@@ -34,9 +39,32 @@ class MainTabBarController: UITabBarController {
         viewControllers = [searchNav, offlineNav, settingsNav]
         
         tabBar.tintColor = .systemBlue
+        
+        // 初始化badge
+        updateDownloadBadge()
     }
     
     private func setupGlobalPlayer() {
         GlobalPlayerContainer.shared.setup(in: self)
+    }
+    
+    private func setupNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDownloadCountChanged(_:)),
+            name: .downloadCountChanged,
+            object: nil
+        )
+    }
+    
+    @objc private func handleDownloadCountChanged(_ notification: Notification) {
+        updateDownloadBadge()
+    }
+    
+    private func updateDownloadBadge() {
+        let count = AudioFileManager.shared.getActiveDownloadCount()
+        if let settingsNav = viewControllers?[2] {
+            settingsNav.tabBarItem.badgeValue = count > 0 ? "\(count)" : nil
+        }
     }
 }

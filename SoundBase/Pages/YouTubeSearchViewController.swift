@@ -222,6 +222,20 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
     }
     
     private func downloadAudio(video: VideoSearchResult) {
+        // 立即创建解析中的下载任务
+        AudioFileManager.shared.createParsingTask(
+            videoId: video.videoId,
+            title: video.title,
+            channelTitle: video.channelTitle,
+            thumbnailURL: video.thumbnailURL
+        )
+        
+        // 播放掉落动画
+        if let cell = findCell(for: video) {
+            playDownloadAnimation(from: cell)
+        }
+        
+        // 异步解析下载链接
         Task {
             do {
                 let audioURL = try await extractAudioURL(for: video)
@@ -230,10 +244,57 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
                     self.startDownload(video: video, audioURL: audioURL)
                 }
             } catch {
+                // 解析失败，移除解析任务
+                AudioFileManager.shared.removeParsingTask(videoId: video.videoId)
+                
                 await MainActor.run {
                     self.showAlert(title: "解析失败", message: error.localizedDescription)
                 }
             }
+        }
+    }
+    
+    // 查找视频对应的cell
+    private func findCell(for video: VideoSearchResult) -> VideoCell? {
+        guard let index = searchResults.firstIndex(where: { $0.videoId == video.videoId }) else {
+            return nil
+        }
+        let indexPath = IndexPath(row: index, section: 0)
+        return tableView.cellForRow(at: indexPath) as? VideoCell
+    }
+    
+    // 播放下载动画
+    private func playDownloadAnimation(from cell: VideoCell) {
+        guard let thumbnailImage = cell.thumbnailImageView.image,
+              let tabBar = tabBarController?.tabBar,
+              let window = view.window else {
+            return
+        }
+        
+        // 创建动画图片视图
+        let animationView = UIImageView(image: thumbnailImage)
+        animationView.contentMode = .scaleAspectFill
+        animationView.clipsToBounds = true
+        animationView.layer.cornerRadius = 8
+        
+        // 设置初始位置（缩略图位置）
+        let startFrame = cell.thumbnailImageView.convert(cell.thumbnailImageView.bounds, to: window)
+        animationView.frame = startFrame
+        window.addSubview(animationView)
+        
+        // 设置目标位置（TabBar设置图标）
+        let settingsTabIndex = 2
+        let tabBarItemWidth = tabBar.bounds.width / CGFloat(tabBar.items?.count ?? 3)
+        let settingsIconX = tabBarItemWidth * CGFloat(settingsTabIndex) + tabBarItemWidth / 2
+        let settingsIconY = tabBar.frame.minY + tabBar.bounds.height / 2
+        let endPoint = CGPoint(x: settingsIconX, y: settingsIconY)
+        
+        // 执行动画
+        UIView.animate(withDuration: 0.6, delay: 0, options: .curveEaseIn, animations: {
+            animationView.frame = CGRect(x: endPoint.x - 20, y: endPoint.y - 20, width: 40, height: 40)
+            animationView.alpha = 0.3
+        }) { _ in
+            animationView.removeFromSuperview()
         }
     }
     
@@ -291,7 +352,7 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
 // MARK: - VideoCell
 class VideoCell: UITableViewCell {
     
-    private let thumbnailImageView: UIImageView = {
+    let thumbnailImageView: UIImageView = {
         let imageView = UIImageView()
         imageView.contentMode = .scaleAspectFill
         imageView.clipsToBounds = true

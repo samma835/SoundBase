@@ -71,19 +71,13 @@ class DownloadManagerViewController: UIViewController {
     @objc private func showCleanupOptions() {
         let alert = UIAlertController(title: "清理下载", message: "选择要清理的内容", preferredStyle: .actionSheet)
         
-        if !completedDownloads.isEmpty {
-            alert.addAction(UIAlertAction(title: "清理已完成的下载", style: .destructive) { [weak self] _ in
-                self?.clearCompletedDownloads()
-            })
-        }
-        
         if !failedDownloads.isEmpty {
             alert.addAction(UIAlertAction(title: "清理失败的下载", style: .destructive) { [weak self] _ in
                 self?.clearFailedDownloads()
             })
         }
         
-        if completedDownloads.isEmpty && failedDownloads.isEmpty {
+        if failedDownloads.isEmpty {
             alert.message = "没有可清理的内容"
         }
         
@@ -93,28 +87,6 @@ class DownloadManagerViewController: UIViewController {
         if let popover = alert.popoverPresentationController {
             popover.barButtonItem = navigationItem.rightBarButtonItem
         }
-        
-        present(alert, animated: true)
-    }
-    
-    private func clearCompletedDownloads() {
-        let alert = UIAlertController(
-            title: "确认清理",
-            message: "将清空已完成的下载列表（本地文件会保留）",
-            preferredStyle: .alert
-        )
-        
-        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-        alert.addAction(UIAlertAction(title: "确定", style: .destructive) { [weak self] _ in
-            do {
-                try AudioFileManager.shared.clearAllCompletedDownloads()
-                self?.loadDownloads()
-            } catch {
-                let errorAlert = UIAlertController(title: "清理失败", message: error.localizedDescription, preferredStyle: .alert)
-                errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
-                self?.present(errorAlert, animated: true)
-            }
-        })
         
         present(alert, animated: true)
     }
@@ -152,6 +124,13 @@ class DownloadManagerViewController: UIViewController {
             name: .downloadFailed,
             object: nil
         )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleDownloadTaskCreated(_:)),
+            name: .downloadTaskCreated,
+            object: nil
+        )
     }
     
     @objc private func handleDownloadProgress(_ notification: Notification) {
@@ -175,6 +154,10 @@ class DownloadManagerViewController: UIViewController {
     }
     
     @objc private func handleDownloadFailed(_ notification: Notification) {
+        loadDownloads()
+    }
+    
+    @objc private func handleDownloadTaskCreated(_ notification: Notification) {
         loadDownloads()
     }
 }
@@ -493,9 +476,18 @@ class DownloadTaskCell: UITableViewCell {
         currentStatus = task.status
         
         switch task.status {
+        case .parsing:
+            progressView.isHidden = false
+            progressLabel.isHidden = false
+            progressView.progress = 0
+            progressLabel.text = "解析链接中..."
+            actionButton.setTitle("取消", for: .normal)
+            actionButton.isEnabled = true
+            
         case .downloading:
             updateProgress(progress)
             actionButton.setTitle("暂停", for: .normal)
+            actionButton.isEnabled = true
             progressView.isHidden = false
             progressLabel.isHidden = false
             
@@ -503,6 +495,7 @@ class DownloadTaskCell: UITableViewCell {
             progressView.progress = Float(progress)
             progressLabel.text = "已暂停"
             actionButton.setTitle("继续", for: .normal)
+            actionButton.isEnabled = true
             progressView.isHidden = false
             progressLabel.isHidden = false
             
@@ -510,6 +503,7 @@ class DownloadTaskCell: UITableViewCell {
             progressView.isHidden = true
             progressLabel.isHidden = true
             actionButton.setTitle("重试", for: .normal)
+            actionButton.isEnabled = true
         }
     }
     
@@ -522,6 +516,8 @@ class DownloadTaskCell: UITableViewCell {
         guard let status = currentStatus else { return }
         
         switch status {
+        case .parsing:
+            onCancel?()
         case .downloading:
             onPause?()
         case .paused:

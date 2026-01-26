@@ -100,7 +100,7 @@ class DownloadManagerViewController: UIViewController {
     private func clearCompletedDownloads() {
         let alert = UIAlertController(
             title: "确认清理",
-            message: "将删除所有已完成的下载文件，此操作不可恢复",
+            message: "将清空已完成的下载列表（本地文件会保留）",
             preferredStyle: .alert
         )
         
@@ -109,10 +109,6 @@ class DownloadManagerViewController: UIViewController {
             do {
                 try AudioFileManager.shared.clearAllCompletedDownloads()
                 self?.loadDownloads()
-                
-                let successAlert = UIAlertController(title: "清理成功", message: nil, preferredStyle: .alert)
-                successAlert.addAction(UIAlertAction(title: "确定", style: .default))
-                self?.present(successAlert, animated: true)
             } catch {
                 let errorAlert = UIAlertController(title: "清理失败", message: error.localizedDescription, preferredStyle: .alert)
                 errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
@@ -126,10 +122,6 @@ class DownloadManagerViewController: UIViewController {
     private func clearFailedDownloads() {
         AudioFileManager.shared.clearAllFailedDownloads()
         loadDownloads()
-        
-        let alert = UIAlertController(title: "清理成功", message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
-        present(alert, animated: true)
     }
     
     private func loadDownloads() {

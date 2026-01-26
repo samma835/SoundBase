@@ -206,46 +206,32 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
     }
     
     private func playAudio(video: VideoSearchResult) {
-        let loadingAlert = UIAlertController(title: "正在解析音频...", message: nil, preferredStyle: .alert)
-        present(loadingAlert, animated: true)
-        
         Task {
             do {
                 let audioURL = try await extractAudioURL(for: video)
                 
                 await MainActor.run {
-                    loadingAlert.dismiss(animated: true) {
-                        self.startPlaying(video: video, audioURL: audioURL)
-                    }
+                    self.startPlaying(video: video, audioURL: audioURL)
                 }
             } catch {
                 await MainActor.run {
-                    loadingAlert.dismiss(animated: true) {
-                        self.showAlert(title: "解析失败", message: error.localizedDescription)
-                    }
+                    self.showAlert(title: "解析失败", message: error.localizedDescription)
                 }
             }
         }
     }
     
     private func downloadAudio(video: VideoSearchResult) {
-        let loadingAlert = UIAlertController(title: "正在解析音频...", message: nil, preferredStyle: .alert)
-        present(loadingAlert, animated: true)
-        
         Task {
             do {
                 let audioURL = try await extractAudioURL(for: video)
                 
                 await MainActor.run {
-                    loadingAlert.dismiss(animated: true) {
-                        self.startDownload(video: video, audioURL: audioURL)
-                    }
+                    self.startDownload(video: video, audioURL: audioURL)
                 }
             } catch {
                 await MainActor.run {
-                    loadingAlert.dismiss(animated: true) {
-                        self.showAlert(title: "解析失败", message: error.localizedDescription)
-                    }
+                    self.showAlert(title: "解析失败", message: error.localizedDescription)
                 }
             }
         }
@@ -279,8 +265,6 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
             audioURL: audioURL,
             artwork: nil
         )
-        
-        showAlert(title: "开始播放", message: video.title)
     }
     
     private func startDownload(video: VideoSearchResult, audioURL: URL) {
@@ -295,7 +279,7 @@ extension YouTubeSearchViewController: UITableViewDelegate, UITableViewDataSourc
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    self?.showAlert(title: "开始下载", message: "下载将在后台进行\n可以在下载管理中查看进度")
+                    break // 静默下载，状态在下载管理页面显示
                 case .failure(let error):
                     self?.showAlert(title: "下载失败", message: error.localizedDescription)
                 }

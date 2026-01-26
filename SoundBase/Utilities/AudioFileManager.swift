@@ -450,17 +450,12 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         print("🧹 [清理] 已清理所有失败的下载")
     }
     
-    // 一键清理已完成的下载
+    // 一键清理已完成的下载（仅清空列表，不删除文件）
     func clearAllCompletedDownloads() throws {
-        let audios = getAllDownloadedAudios()
-        for audio in audios {
-            try? FileManager.default.removeItem(at: audio.fileURL)
-        }
-        
         let metadataURL = documentsDirectory.appendingPathComponent(metadataFileName)
         try? FileManager.default.removeItem(at: metadataURL)
         
-        print("🧹 [清理] 已清理所有已完成的下载")
+        print("🧹 [清理] 已清理所有已完成的下载列表（文件保留）")
     }
     
     // 更新音频标题

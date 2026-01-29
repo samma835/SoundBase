@@ -15,11 +15,21 @@ struct DownloadedAudio: Codable {
     let fileName: String  // 只存储文件名，不存储绝对路径
     let downloadDate: Date
     let thumbnailURL: URL?
+    let sourceURL: URL?  // 下载链接（用于重新下载）
     
     // 动态计算文件完整路径
     var fileURL: URL {
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documentsDirectory.appendingPathComponent(fileName)
+    }
+    
+    // 获取文件大小（字节）
+    var fileSize: Int64? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let size = attributes[.size] as? Int64 else {
+            return nil
+        }
+        return size
     }
 }
 
@@ -159,6 +169,23 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         do {
             let destinationURL = downloadInfo.destinationURL
             
+            // 验证下载文件大小
+            let attributes = try FileManager.default.attributesOfItem(atPath: location.path)
+            let fileSize = attributes[.size] as? Int64 ?? 0
+            let fileSizeMB = Double(fileSize) / 1024.0 / 1024.0
+            
+            print("📊 [下载] 文件大小: \(String(format: "%.2f", fileSizeMB))MB (\(fileSize) bytes)")
+            
+            // 验证文件大小是否合理（至少100KB）
+            if fileSize < 100 * 1024 {
+                let error = NSError(
+                    domain: "AudioFileManager",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "下载的文件过小 (\(String(format: "%.2f", fileSizeMB))MB)，可能下载失败"]
+                )
+                throw error
+            }
+            
             // 如果目标文件已存在，先删除
             if FileManager.default.fileExists(atPath: destinationURL.path) {
                 try FileManager.default.removeItem(at: destinationURL)
@@ -174,6 +201,7 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
                 print("✅ [文件管理] 文件验证成功")
             } else {
                 print("❌ [文件管理] 文件验证失败")
+                throw NSError(domain: "AudioFileManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "文件保存失败"])
             }
             
             let audio = DownloadedAudio(
@@ -182,14 +210,15 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
                 channelTitle: downloadInfo.channelTitle,
                 fileName: destinationURL.lastPathComponent,  // 只存储文件名
                 downloadDate: Date(),
-                thumbnailURL: downloadInfo.thumbnailURL
+                thumbnailURL: downloadInfo.thumbnailURL,
+                sourceURL: downloadInfo.sourceURL  // 保存下载链接
             )
             
             // 保存元数据
             saveMetadata(audio: audio)
             
             let duration = Date().timeIntervalSince(downloadInfo.startTime)
-            print("✅ [下载] 下载完成: \(downloadInfo.title) (耗时: \(String(format: "%.1f", duration))秒)")
+            print("✅ [下载] 下载完成: \(downloadInfo.title) (耗时: \(String(format: "%.1f", duration))秒, 大小: \(String(format: "%.2f", fileSizeMB))MB)")
             
             // 发送通知
             DispatchQueue.main.async {
@@ -200,6 +229,21 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             
         } catch {
             print("❌ [下载] 文件处理失败: \(error.localizedDescription)")
+            
+            // 删除无效的临时文件
+            try? FileManager.default.removeItem(at: location)
+            
+            // 保存失败的下载任务
+            let failedDownload = FailedDownload(
+                videoId: downloadInfo.videoId,
+                title: downloadInfo.title,
+                channelTitle: downloadInfo.channelTitle,
+                thumbnailURL: downloadInfo.thumbnailURL,
+                failureDate: Date(),
+                errorMessage: error.localizedDescription
+            )
+            saveFailedDownload(failedDownload)
+            
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .downloadFailed, object: error)
                 downloadInfo.completion(.failure(error))
@@ -503,6 +547,79 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
         )
     }
     
+    // 智能重新下载（优先使用已有链接，失败则重新解析）
+    func smartRedownload(_ audio: DownloadedAudio, completion: @escaping (Result<DownloadedAudio, Error>) -> Void) {
+        print("🔄 [重新下载] 开始智能重新下载: \(audio.title)")
+        
+        // 如果有保存的sourceURL，先尝试验证
+        if let sourceURL = audio.sourceURL {
+            print("🔍 [重新下载] 验证已保存的下载链接...")
+            
+            Task {
+                do {
+                    let isValid = try await YouTubeAudioExtractor.shared.validateAudioURL(sourceURL)
+                    
+                    if isValid {
+                        print("✅ [重新下载] 链接仍然有效，直接使用")
+                        await MainActor.run {
+                            self.startRedownload(audio: audio, sourceURL: sourceURL, completion: completion)
+                        }
+                    } else {
+                        print("⚠️ [重新下载] 链接已失效，重新解析...")
+                        await self.redownloadWithNewURL(audio: audio, completion: completion)
+                    }
+                } catch {
+                    print("⚠️ [重新下载] 验证失败，尝试重新解析...")
+                    await self.redownloadWithNewURL(audio: audio, completion: completion)
+                }
+            }
+        } else {
+            print("⚠️ [重新下载] 没有保存的链接，重新解析...")
+            Task {
+                await self.redownloadWithNewURL(audio: audio, completion: completion)
+            }
+        }
+    }
+    
+    // 重新解析并下载
+    private func redownloadWithNewURL(audio: DownloadedAudio, completion: @escaping (Result<DownloadedAudio, Error>) -> Void) async {
+        do {
+            let newURL = try await YouTubeAudioExtractor.shared.extractAudioURL(videoId: audio.videoId)
+            print("✅ [重新下载] 成功获取新的下载链接")
+            
+            await MainActor.run {
+                self.startRedownload(audio: audio, sourceURL: newURL, completion: completion)
+            }
+        } catch {
+            print("❌ [重新下载] 重新解析失败: \(error.localizedDescription)")
+            await MainActor.run {
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    // 开始重新下载
+    private func startRedownload(audio: DownloadedAudio, sourceURL: URL, completion: @escaping (Result<DownloadedAudio, Error>) -> Void) {
+        // 先删除旧文件
+        if FileManager.default.fileExists(atPath: audio.fileURL.path) {
+            try? FileManager.default.removeItem(at: audio.fileURL)
+            print("🗑️ [重新下载] 已删除旧文件")
+        }
+        
+        // 从元数据中移除
+        removeMetadata(videoId: audio.videoId)
+        
+        // 开始新的下载
+        saveAudio(
+            videoId: audio.videoId,
+            title: audio.title,
+            channelTitle: audio.channelTitle,
+            thumbnailURL: audio.thumbnailURL,
+            sourceURL: sourceURL,
+            completion: completion
+        )
+    }
+    
     // 移除失败的下载任务
     func removeFailedDownload(_ failedDownload: FailedDownload) {
         removeFromFailedDownloads(videoId: failedDownload.videoId)
@@ -530,7 +647,8 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             channelTitle: audio.channelTitle,
             fileName: audio.fileName,
             downloadDate: audio.downloadDate,
-            thumbnailURL: audio.thumbnailURL
+            thumbnailURL: audio.thumbnailURL,
+            sourceURL: audio.sourceURL  // 保留sourceURL
         )
         
         audios[index] = updatedAudio
@@ -606,13 +724,26 @@ class AudioFileManager: NSObject, URLSessionDownloadDelegate {
             decoder.dateDecodingStrategy = .iso8601
             let audios = try decoder.decode([DownloadedAudio].self, from: data)
             
-            // 验证文件是否真实存在
+            // 验证文件是否真实存在，并检查文件大小
             let validAudios = audios.filter { audio in
                 let exists = FileManager.default.fileExists(atPath: audio.fileURL.path)
                 if !exists {
                     print("⚠️ [持久化] 音频文件不存在: \(audio.fileURL.path)")
+                    return false
                 }
-                return exists
+                
+                // 检查文件大小
+                if let fileSize = audio.fileSize {
+                    let fileSizeMB = Double(fileSize) / 1024.0 / 1024.0
+                    if fileSize < 100 * 1024 {
+                        print("⚠️ [持久化] 音频文件过小 (\(String(format: "%.2f", fileSizeMB))MB): \(audio.title)")
+                        // 删除无效文件
+                        try? FileManager.default.removeItem(at: audio.fileURL)
+                        return false
+                    }
+                }
+                
+                return true
             }
             
             print("💾 [持久化] 成功加载 \(validAudios.count) 个音频 (原始: \(audios.count))")

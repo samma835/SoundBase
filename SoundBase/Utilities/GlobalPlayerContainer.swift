@@ -70,13 +70,13 @@ class GlobalPlayerContainer {
         // 无论迷你播放器是否显示，都要更新信息
         miniPlayerView?.updateInfo(title: title, artist: artist, artwork: artwork)
         
-        // 如果已经显示，不需要再次显示动画
-        guard miniPlayerView?.isHidden == true else { return }
-        
         // 检查是否在播放器详情页，如果是则不显示迷你播放器（但信息已经更新了）
         if isInPlayerDetailPage() {
             return
         }
+        
+        // 如果已经显示，不需要再次显示动画
+        guard miniPlayerView?.isHidden == true else { return }
         
         // 显示迷你播放器
         miniPlayerView?.isHidden = false

@@ -206,7 +206,8 @@ extension OfflinePlaylistViewController: UITableViewDelegate, UITableViewDataSou
                     channelTitle: audio.channelTitle,
                     fileName: audio.fileName,
                     downloadDate: audio.downloadDate,
-                    thumbnailURL: audio.thumbnailURL
+                    thumbnailURL: audio.thumbnailURL,
+                    sourceURL: audio.sourceURL  // 保留sourceURL
                 )
                 self?.tableView.reloadRows(at: [indexPath], with: .automatic)
                 print("✏️ [离线音频] 重命名成功: \(newTitle)")

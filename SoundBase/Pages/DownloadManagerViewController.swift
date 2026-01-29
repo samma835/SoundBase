@@ -339,32 +339,114 @@ private extension DownloadManagerViewController {
     func redownloadAudio(_ audio: DownloadedAudio) {
         let alert = UIAlertController(
             title: "重新下载",
-            message: "下载链接已过期，请返回搜索页面重新搜索并下载",
+            message: "确定要重新下载「\(audio.title)」吗？",
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // 显示加载提示
+            let loadingAlert = UIAlertController(title: "正在准备下载...", message: nil, preferredStyle: .alert)
+            self.present(loadingAlert, animated: true)
+            
+            // 使用智能重新下载
+            AudioFileManager.shared.smartRedownload(audio) { result in
+                DispatchQueue.main.async {
+                    loadingAlert.dismiss(animated: true) {
+                        switch result {
+                        case .success:
+                            let successAlert = UIAlertController(
+                                title: "开始下载",
+                                message: "已开始重新下载，请在下载列表中查看进度",
+                                preferredStyle: .alert
+                            )
+                            successAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                            self.present(successAlert, animated: true)
+                            
+                        case .failure(let error):
+                            let errorAlert = UIAlertController(
+                                title: "下载失败",
+                                message: error.localizedDescription,
+                                preferredStyle: .alert
+                            )
+                            errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                            self.present(errorAlert, animated: true)
+                        }
+                    }
+                }
+            }
+        })
+        
         present(alert, animated: true)
     }
     
     func retryDownload(_ failedDownload: FailedDownload) {
-        // 显示加载提示
-        let alert = UIAlertController(title: "正在重新获取下载链接...", message: nil, preferredStyle: .alert)
-        present(alert, animated: true)
+        let alert = UIAlertController(
+            title: "重试下载",
+            message: "确定要重试下载「\(failedDownload.title)」吗？",
+            preferredStyle: .alert
+        )
         
-        // 这里需要重新获取下载链接
-        // 由于我们需要sourceURL，这里需要集成YouTube API或者保存sourceURL
-        // 暂时显示提示，需要用户重新搜索
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            alert.dismiss(animated: true) {
-                let errorAlert = UIAlertController(
-                    title: "需要重新搜索",
-                    message: "下载链接已过期，请返回搜索页面重新搜索并下载",
-                    preferredStyle: .alert
-                )
-                errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
-                self.present(errorAlert, animated: true)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // 显示加载提示
+            let loadingAlert = UIAlertController(title: "正在获取下载链接...", message: nil, preferredStyle: .alert)
+            self.present(loadingAlert, animated: true)
+            
+            // 异步获取新的下载链接
+            Task {
+                do {
+                    let audioURL = try await YouTubeAudioExtractor.shared.extractAudioURL(videoId: failedDownload.videoId)
+                    
+                    await MainActor.run {
+                        loadingAlert.dismiss(animated: true) {
+                            // 开始重新下载
+                            AudioFileManager.shared.retryDownload(failedDownload, sourceURL: audioURL) { result in
+                                DispatchQueue.main.async {
+                                    switch result {
+                                    case .success:
+                                        let successAlert = UIAlertController(
+                                            title: "开始下载",
+                                            message: "已开始下载，请在下载列表中查看进度",
+                                            preferredStyle: .alert
+                                        )
+                                        successAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                                        self.present(successAlert, animated: true)
+                                        
+                                    case .failure(let error):
+                                        let errorAlert = UIAlertController(
+                                            title: "下载失败",
+                                            message: error.localizedDescription,
+                                            preferredStyle: .alert
+                                        )
+                                        errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                                        self.present(errorAlert, animated: true)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    await MainActor.run {
+                        loadingAlert.dismiss(animated: true) {
+                            let errorAlert = UIAlertController(
+                                title: "获取链接失败",
+                                message: error.localizedDescription,
+                                preferredStyle: .alert
+                            )
+                            errorAlert.addAction(UIAlertAction(title: "确定", style: .default))
+                            self.present(errorAlert, animated: true)
+                        }
+                    }
+                }
             }
-        }
+        })
+        
+        present(alert, animated: true)
     }
 }
 

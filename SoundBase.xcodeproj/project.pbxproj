@@ -27,6 +27,7 @@
 		C5AE55C8858A2E1E01EFC947 /* Pods_SoundBase.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */; };
 		EFA4741B58ADBD0FB154BFCF /* DownloadManagerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3D721394FB81CB13DCF086 /* DownloadManagerViewController.swift */; };
 		F400CF8F83CD4131AE2A579F /* PlaylistViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05664B837647413BABC654BA /* PlaylistViewController.swift */; };
+		0B958BA32B9086F2BBA4D491 /* YouTubeAudioExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51077EA8B81B01E05891D374 /* YouTubeAudioExtractor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +55,7 @@
 		D34462C65A350D09062BC27F /* Pods-SoundBase.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SoundBase.release.xcconfig"; path = "Target Support Files/Pods-SoundBase/Pods-SoundBase.release.xcconfig"; sourceTree = "<group>"; };
 		E532EFA0F7184F3AA90C0FF1 /* PlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistManager.swift; sourceTree = "<group>"; };
 		E5F23E0F51B6444C003EB555 /* Pods_SoundBase.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SoundBase.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		51077EA8B81B01E05891D374 /* YouTubeAudioExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeAudioExtractor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,7 +101,8 @@
 				24095E2A2F242E2600DCD76A /* GlobalPlayerContainer.swift */,
 				24E74FD62F21FE980057F944 /* AudioFileManager.swift */,
 				E532EFA0F7184F3AA90C0FF1 /* PlaylistManager.swift */,
-			);
+							51077EA8B81B01E05891D374 /* YouTubeAudioExtractor.swift */,
+);
 			path = Utilities;
 			sourceTree = "<group>";
 		};
@@ -284,7 +287,8 @@
 				EFA4741B58ADBD0FB154BFCF /* DownloadManagerViewController.swift in Sources */,
 				4A20A32F7EE2433EB429AE6A /* PlaylistManager.swift in Sources */,
 				F400CF8F83CD4131AE2A579F /* PlaylistViewController.swift in Sources */,
-			);
+							0B958BA32B9086F2BBA4D491 /* YouTubeAudioExtractor.swift in Sources */,
+);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */

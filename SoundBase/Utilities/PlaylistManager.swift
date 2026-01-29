@@ -114,9 +114,11 @@ class PlaylistManager {
         
         // 检查是否已存在相同的视频
         if let existingIndex = playlist.firstIndex(where: { $0.videoId == videoId }) {
-            // 如果是当前播放的，直接返回
+            // 如果是当前播放的，重新播放（确保显示播放器）
             if currentIndex == existingIndex {
-                print("🎵 [播放列表] 已经在播放该音频")
+                print("🎵 [播放列表] 重新播放当前音频")
+                playItem(at: existingIndex)
+                notifyCurrentTrackChanged()
                 return
             }
             // 删除旧的
@@ -163,10 +165,12 @@ class PlaylistManager {
         
         // 检查是否已存在相同的视频
         if let existingIndex = playlist.firstIndex(where: { $0.videoId == videoId }) {
-            // 如果是当前播放的，直接返回
+            // 如果是当前播放的，重新显示播放器
             if currentIndex == existingIndex {
-                print("🎵 [播放列表] 已经在播放该音频")
-                return item.id
+                print("🎵 [播放列表] 重新显示当前音频")
+                let existingItem = playlist[existingIndex]
+                showPlayerWithParsingState(item: existingItem)
+                return existingItem.id
             }
             // 删除旧的
             playlist.remove(at: existingIndex)
